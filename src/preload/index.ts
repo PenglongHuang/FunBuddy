@@ -36,6 +36,8 @@ const api = {
     ipcRenderer.invoke(IPC.WINDOW_EXPAND_PANEL, petX, petY),
   windowCollapsePet: (petX?: number, petY?: number) =>
     ipcRenderer.invoke(IPC.WINDOW_COLLAPSE_PET, petX, petY),
+  windowInvalidate: () =>
+    ipcRenderer.invoke(IPC.WINDOW_INVALIDATE),
 
   // Notification
   notificationShow: (title: string, body: string) => ipcRenderer.invoke(IPC.NOTIFICATION_SHOW, title, body),
@@ -60,6 +62,16 @@ const api = {
     const handler = () => callback()
     ipcRenderer.on(IPC.HOTKEY_QUICK_CAPTURE, handler)
     return () => ipcRenderer.removeListener(IPC.HOTKEY_QUICK_CAPTURE, handler)
+  },
+
+  // Pet cursor tracking
+  startPetTracking: () => ipcRenderer.invoke(IPC.PET_START_TRACKING),
+  stopPetTracking: () => ipcRenderer.invoke(IPC.PET_STOP_TRACKING),
+  setPetDragging: (dragging: boolean) => ipcRenderer.invoke(IPC.PET_SET_DRAGGING, dragging),
+  onPetCursorHover: (callback: (hovered: boolean) => void) => {
+    const handler = (_e: any, data: { hovered: boolean }) => callback(data.hovered)
+    ipcRenderer.on(IPC.PET_CURSOR_HOVER, handler)
+    return () => ipcRenderer.removeListener(IPC.PET_CURSOR_HOVER, handler)
   },
 }
 

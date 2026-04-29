@@ -1,8 +1,8 @@
 import { useId, useState, useRef, useCallback, useEffect } from 'react'
-import { motion } from 'motion/react'
+import { motion, AnimatePresence } from 'motion/react'
 import { usePetStore } from '@/stores/petStore'
-import type { PetState } from '@/types/pet'
-import type { HoverAnimation } from '@/types/pet'
+import type { PetState, HoverAnimation } from '@/types/pet'
+import type { TimerPhase } from '@/types/timer'
 import {
   pickRandomHover,
   containerVariants,
@@ -10,6 +10,9 @@ import {
   bodyVariants,
   wiggleTransition,
 } from './hoverAnimations'
+import { useTimerStore } from '@/stores/timerStore'
+import { windowApi } from '@/lib/ipc'
+import { formatTime } from '@/lib/time-utils'
 
 const STAR_PATH = 'M122 52Q128 40 134 52L155 95L204 99Q218 100 208 109L172 142L182 191Q185 205 172 197L128 170L84 197Q71 205 74 191L84 142L48 109Q38 100 52 99L101 95Z'
 
@@ -17,13 +20,21 @@ interface PetAvatarProps {
   size?: number
   onClick?: () => void
   className?: string
+  showTimer?: boolean
 }
 
-export default function PetAvatar({ size = 100, onClick, className = '' }: PetAvatarProps) {
+export default function PetAvatar({ size = 100, onClick, className = '', showTimer = true }: PetAvatarProps) {
   const state = usePetStore((s) => s.state)
   const touch = usePetStore((s) => s.touch)
   const petHovered = usePetStore((s) => s.petHovered)
+  const timerStatus = useTimerStore((s) => s.status)
+  const isTimerRunning = timerStatus === 'running'
   const [hoverAnim, setHoverAnim] = useState<HoverAnimation | null>(null)
+  const [isMouseOver, setIsMouseOver] = useState(false)
+
+  useEffect(() => {
+    if (isTimerRunning) windowApi.invalidate()
+  }, [isTimerRunning])
   const [isBlinking, setIsBlinking] = useState(false)
   const lastHoverAnimRef = useRef<HoverAnimation | null>(null)
   const spinDirectionRef = useRef<'spin' | 'spinCCW'>('spin')
@@ -67,6 +78,7 @@ export default function PetAvatar({ size = 100, onClick, className = '' }: PetAv
   }, [displayState])
 
   const handleMouseEnter = useCallback(() => {
+    setIsMouseOver(true)
     const pick = pickRandomHover(lastHoverAnimRef.current)
     lastHoverAnimRef.current = pick
     if (pick === 'spin') {
@@ -76,12 +88,14 @@ export default function PetAvatar({ size = 100, onClick, className = '' }: PetAv
   }, [])
 
   const handleMouseLeave = useCallback(() => {
+    setIsMouseOver(false)
     setHoverAnim(null)
   }, [])
 
   // Store-based hover trigger for pet mode (React onMouseEnter doesn't fire
   // when the window uses setIgnoreMouseEvents with forward mode)
   useEffect(() => {
+    setIsMouseOver(petHovered)
     if (petHovered) {
       const pick = pickRandomHover(lastHoverAnimRef.current)
       lastHoverAnimRef.current = pick
@@ -105,11 +119,12 @@ export default function PetAvatar({ size = 100, onClick, className = '' }: PetAv
     : 'wiggle'
 
   const isHovered = hoverAnim !== null
+  const showTimerBubble = showTimer && isTimerRunning && (isMouseOver || petHovered)
 
   return (
     <motion.div
       className={className}
-      style={{ width: size, height: size, cursor: 'pointer', userSelect: 'none', position: 'relative' }}
+      style={{ width: size, height: size, cursor: 'pointer', userSelect: 'none', position: 'relative', overflow: 'visible' }}
       variants={containerVariants}
       animate={isHovered ? 'hovered' : 'idle'}
       transition={containerTransition}
@@ -150,11 +165,16 @@ export default function PetAvatar({ size = 100, onClick, className = '' }: PetAv
 
           {renderEyes(displayState, isBlinking)}
 
-          {hoverAnim === 'think' && <ThoughtBubble />}
+          {hoverAnim === 'think' && !isTimerRunning && <ThoughtBubble />}
 
           {hoverAnim === 'heart' && <HeartOverlay />}
         </svg>
       </motion.div>
+      <AnimatePresence>
+        {showTimerBubble && (
+          <FocusBubble size={size} />
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
@@ -204,23 +224,94 @@ function HeartOverlay() {
   )
 }
 
-function renderEyes(state: PetState, isBlinking: boolean) {
-  if (isBlinking && state === 'smile') {
-    return (
-      <>
-        <line x1="94" y1="126" x2="118" y2="126" stroke="#5D4037" strokeWidth="4" strokeLinecap="round" />
-        <line x1="138" y1="126" x2="162" y2="126" stroke="#5D4037" strokeWidth="4" strokeLinecap="round" />
-      </>
-    )
-  }
+const PHASE_COLORS: Record<TimerPhase, { stroke: string; bg: string; text: string }> = {
+  focus: { stroke: '#FFD54F', bg: 'rgba(255,213,79,0.25)', text: '#5D4037' },
+  shortBreak: { stroke: '#64B5F6', bg: 'rgba(100,181,246,0.25)', text: '#37474F' },
+  longBreak: { stroke: '#81C784', bg: 'rgba(129,199,132,0.25)', text: '#2E4A2E' },
+}
 
-  if (state === 'sleep') {
-    return (
-      <>
-        <line x1="94" y1="126" x2="118" y2="126" stroke="#5D4037" strokeWidth="4" strokeLinecap="round" />
-        <line x1="138" y1="126" x2="162" y2="126" stroke="#5D4037" strokeWidth="4" strokeLinecap="round" />
-      </>
-    )
+function FocusBubble({ size }: { size: number }) {
+  const remainingMs = useTimerStore((s) => s.remainingMs)
+  const totalMs = useTimerStore((s) => s.totalMs)
+  const phase = useTimerStore((s) => s.phase)
+  const progress = totalMs > 0 ? remainingMs / totalMs : 1
+  const timeStr = formatTime(remainingMs)
+  const R = 17
+  const C = 2 * Math.PI * R
+  const dashOffset = C * (1 - progress)
+  const above = size > 60
+  const ringPx = above ? 44 : 34
+  const cx = 26
+  const vb = cx * 2
+  const colors = PHASE_COLORS[phase]
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        ...(above
+          ? { bottom: '100%', marginBottom: -4 }
+          : { top: '100%', marginTop: -2 }),
+        pointerEvents: 'none',
+        zIndex: 10,
+        overflow: 'visible',
+      }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: above ? 5 : -5, scale: 0.85 }}
+        animate={{ opacity: 1, y: [0, above ? -3 : 2, 0], scale: 1 }}
+        exit={{ opacity: 0, y: above ? 5 : -5, scale: 0.85 }}
+        transition={{
+          opacity: { duration: 0.25 },
+          scale: { duration: 0.25 },
+          y: { duration: 2.5, ease: 'easeInOut', repeat: Infinity, repeatType: 'reverse' as const },
+        }}
+      >
+        <svg width={ringPx} height={ringPx} viewBox={`0 0 ${vb} ${vb}`} overflow="visible">
+          <circle
+            cx={cx} cy={cx} r={R}
+            fill="rgba(255,255,255,0.88)"
+            stroke={colors.bg}
+            strokeWidth={3.5}
+          />
+          <circle
+            cx={cx} cy={cx} r={R}
+            fill="none"
+            stroke={colors.stroke}
+            strokeWidth={3.5}
+            strokeLinecap="round"
+            strokeDasharray={C}
+            strokeDashoffset={dashOffset}
+            transform={`rotate(-90 ${cx} ${cx})`}
+            style={{ transition: 'stroke-dashoffset 0.5s linear' }}
+          />
+          <text
+            x={cx} y={cx + 4}
+            textAnchor="middle"
+            fontSize={10}
+            fill={colors.text}
+            fontWeight={600}
+          >
+            {timeStr}
+          </text>
+        </svg>
+      </motion.div>
+    </div>
+  )
+}
+
+function renderEyes(state: PetState, isBlinking: boolean) {
+  const closedEyes = (
+    <>
+      <line x1="94" y1="126" x2="118" y2="126" stroke="#5D4037" strokeWidth="4" strokeLinecap="round" />
+      <line x1="138" y1="126" x2="162" y2="126" stroke="#5D4037" strokeWidth="4" strokeLinecap="round" />
+    </>
+  )
+
+  if (state === 'sleep' || (isBlinking && state === 'smile')) {
+    return closedEyes
   }
 
   if (state === 'singleWink') {

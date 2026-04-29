@@ -17,7 +17,7 @@ export default function PetModeView() {
   })
 
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center">
+    <div className="w-full h-full flex flex-col items-center justify-center" style={{ overflow: 'visible' }}>
       <div ref={petRef} onMouseDown={handleMouseDown}>
         <PetAvatar size={80} />
       </div>

@@ -1,11 +1,12 @@
 import { BrowserWindow, screen, shell } from 'electron'
 import { join } from 'path'
+import { IPC } from '../shared/ipc-channels'
 
 let mainWindow: BrowserWindow | null = null
 
 // Mode dimensions
 const PET_WIDTH = 110
-const PET_HEIGHT = 120
+const PET_HEIGHT = 200
 const EXPANDED_WIDTH = 480
 const EXPANDED_HEIGHT = 680
 
@@ -139,4 +140,57 @@ export function getPetDimensions() {
 
 export function getExpandedDimensions() {
   return { width: EXPANDED_WIDTH, height: EXPANDED_HEIGHT }
+}
+
+// --- Pet cursor tracking (main-process hit-testing) ---
+
+let trackingInterval: ReturnType<typeof setInterval> | null = null
+let trackingHovering = false
+let trackingDragging = false
+
+const HIT_RADIUS = 45
+
+export function startPetCursorTracking(win: BrowserWindow): void {
+  stopPetCursorTracking()
+  win.setIgnoreMouseEvents(true, { forward: true })
+  trackingHovering = false
+
+  trackingInterval = setInterval(() => {
+    if (win.isDestroyed()) {
+      stopPetCursorTracking()
+      return
+    }
+
+    const cursor = screen.getCursorScreenPoint()
+    const bounds = win.getBounds()
+
+    const petCx = bounds.x + bounds.width / 2
+    const petCy = bounds.y + bounds.height / 2
+    const dx = cursor.x - petCx
+    const dy = cursor.y - petCy
+    const inside = dx * dx + dy * dy <= HIT_RADIUS * HIT_RADIUS
+
+    if (inside && !trackingHovering) {
+      trackingHovering = true
+      win.setIgnoreMouseEvents(false)
+      win.webContents.send(IPC.PET_CURSOR_HOVER, { hovered: true })
+    } else if (!inside && trackingHovering && !trackingDragging) {
+      trackingHovering = false
+      win.setIgnoreMouseEvents(true, { forward: true })
+      win.webContents.send(IPC.PET_CURSOR_HOVER, { hovered: false })
+    }
+  }, 50)
+}
+
+export function stopPetCursorTracking(): void {
+  if (trackingInterval) {
+    clearInterval(trackingInterval)
+    trackingInterval = null
+  }
+  trackingHovering = false
+  trackingDragging = false
+}
+
+export function setPetDragging(dragging: boolean): void {
+  trackingDragging = dragging
 }

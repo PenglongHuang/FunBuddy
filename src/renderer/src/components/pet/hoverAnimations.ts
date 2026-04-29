@@ -21,7 +21,7 @@ export const containerTransition: Transition = {
 
 export const bodyVariants: Variants = {
   wiggle: {
-    rotate: [0, 2, 0, -2, 0],
+    rotate: [0, 4, 0, -4, 0],
     y: 0,
     scaleY: 1,
     scaleX: 1,
@@ -41,11 +41,11 @@ export const bodyVariants: Variants = {
   },
   bounce: {
     y: [0, -20, 0, -10, 0],
-    rotate: [0, -5, 0, 5, 0],
+    rotate: [0, -10, 0, 10, 0],
     transition: { duration: 0.8, ease: 'easeInOut' },
   },
   think: {
-    rotate: [0, 3, -3, 2, -2, 0],
+    rotate: [0, 6, -6, 4, -4, 0],
     y: 0,
     scaleY: 1,
     scaleX: 1,

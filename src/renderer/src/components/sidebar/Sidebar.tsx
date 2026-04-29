@@ -38,7 +38,7 @@ export default function Sidebar() {
       >
         {/* Pet */}
         <div className="flex flex-col items-center" style={{ marginBottom: 6 }}>
-          <PetAvatar size={52} onClick={() => setWindowMode('pet')} />
+          <PetAvatar size={52} showTimer={false} onClick={() => setWindowMode('pet')} />
           <div style={{ marginTop: 3 }}>
             <StateIndicator />
           </div>

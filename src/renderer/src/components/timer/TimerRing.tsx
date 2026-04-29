@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { motion } from 'motion/react'
 import type { TimerPhase, TimerStatus } from '@/types/timer'
+import { formatTime } from '@/lib/time-utils'
 
 interface TimerRingProps {
   phase: TimerPhase
@@ -20,13 +21,6 @@ const PHASE_LABELS: Record<TimerPhase, string> = {
   focus: '专注',
   shortBreak: '短休息',
   longBreak: '长休息',
-}
-
-function formatTime(ms: number): string {
-  const totalSec = Math.ceil(ms / 1000)
-  const min = Math.floor(totalSec / 60)
-  const sec = totalSec % 60
-  return `${min}:${sec.toString().padStart(2, '0')}`
 }
 
 export default function TimerRing({ phase, remainingMs, totalMs, round, status }: TimerRingProps) {

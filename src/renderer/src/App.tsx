@@ -4,6 +4,7 @@ import PetModeView from '@/components/pet/PetModeView'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePetAnimation } from '@/hooks/usePetAnimation'
 import { usePanelMorph } from '@/hooks/usePanelMorph'
+import { useTimer } from '@/hooks/useTimer'
 import { usePetStore } from '@/stores/petStore'
 import { fs } from '@/lib/ipc'
 import { nanoid } from 'nanoid'
@@ -78,6 +79,7 @@ export default function App() {
 
   usePetAnimation()
   usePanelMorph()
+  useTimer()
 
   const isQuickCapture = window.location.hash === '#quick-capture'
 

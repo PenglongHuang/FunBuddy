@@ -44,6 +44,14 @@ export const windowApi = {
     window.api.windowExpandPanel(petX, petY),
   collapsePet: (petX?: number, petY?: number) =>
     window.api.windowCollapsePet(petX, petY),
+  invalidate: (): Promise<void> =>
+    window.api.windowInvalidate(),
+  startPetTracking: (): Promise<void> =>
+    window.api.startPetTracking(),
+  stopPetTracking: (): Promise<void> =>
+    window.api.stopPetTracking(),
+  setPetDragging: (dragging: boolean): Promise<void> =>
+    window.api.setPetDragging(dragging),
 }
 
 export const notify = {
@@ -68,4 +76,9 @@ export const autolaunch = {
 export const storeEvents = {
   onDidChange: (callback: (key: string, newValue: unknown, oldValue: unknown) => void) =>
     window.api.onStoreDidChange(callback),
+}
+
+export const petEvents = {
+  onCursorHover: (callback: (hovered: boolean) => void) =>
+    window.api.onPetCursorHover(callback),
 }

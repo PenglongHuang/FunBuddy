@@ -3,11 +3,9 @@ import { motion } from 'motion/react'
 import TimerRing from './TimerRing'
 import TimerControls from './TimerControls'
 import { useTimerStore } from '@/stores/timerStore'
-import { useTimer } from '@/hooks/useTimer'
 
 export default function TimerPanel() {
   const timer = useTimerStore((s) => s)
-  useTimer()
 
   useEffect(() => {
     timer._loadPersisted()

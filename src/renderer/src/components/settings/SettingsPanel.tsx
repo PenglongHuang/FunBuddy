@@ -16,8 +16,8 @@ function ToggleRow({ label, value, onChange }: { label: string; value: boolean; 
         onClick={() => onChange(!value)}
         className="relative"
         style={{
-          width: 51,
-          height: 31,
+          width: 42,
+          height: 24,
           borderRadius: 'var(--radius-full)',
           background: value ? 'var(--accent-blue)' : 'rgba(120,120,128,0.24)',
           transition: 'background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -31,13 +31,13 @@ function ToggleRow({ label, value, onChange }: { label: string; value: boolean; 
             position: 'absolute',
             top: 2,
             left: 2,
-            width: 27,
-            height: 27,
+            width: 20,
+            height: 20,
             borderRadius: '50%',
             background: 'white',
             boxShadow: '0 1px 3px rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.12)',
             transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-            transform: value ? 'translateX(20px)' : 'translateX(0)',
+            transform: value ? 'translateX(18px)' : 'translateX(0)',
           }}
         />
       </button>
@@ -90,37 +90,77 @@ function NumberInputRow({
   value,
   unit,
   onChange,
+  min = 1,
+  max = 120,
+  step = 1,
 }: {
   label: string
   value: number
   unit: string
   onChange: (v: number) => void
+  min?: number
+  max?: number
+  step?: number
 }) {
+  const stepperStyle: React.CSSProperties = {
+    width: 22,
+    height: 22,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: 'none',
+    borderRadius: 'var(--radius-xs)',
+    fontSize: 13,
+    fontWeight: 500,
+    lineHeight: 1,
+    padding: 0,
+  }
+
   return (
     <div className="flex items-center justify-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--separator)' }}>
       <span className="text-caption-1" style={{ color: 'var(--text-primary)' }}>{label}</span>
-      <div className="flex items-center">
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className={undefined}
+      <div className="flex items-center gap-1.5">
+        <button
+          className="stepper-btn"
+          disabled={value <= min}
           style={{
-            width: 64,
-            height: 32,
-            background: 'var(--bg-tertiary)',
-            borderRadius: 'var(--radius-sm)',
-            color: 'var(--text-primary)',
-            fontSize: 13,
-            textAlign: 'center',
-            border: '1px solid transparent',
-            outline: 'none',
-            transition: 'border-color 0.15s ease',
+            ...stepperStyle,
+            color: value <= min ? 'var(--text-tertiary)' : 'var(--accent-blue)',
+            cursor: value <= min ? 'default' : 'pointer',
           }}
-          onFocus={(e) => { e.target.style.borderColor = 'var(--accent-blue)' }}
-          onBlur={(e) => { e.target.style.borderColor = 'transparent' }}
-        />
-        <span className="text-caption-1 ml-1.5" style={{ color: 'var(--text-tertiary)' }}>{unit}</span>
+          onClick={() => onChange(Math.max(min, value - step))}
+        >
+          −
+        </button>
+        <div
+          style={{
+            width: 32,
+            height: 22,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--bg-tertiary)',
+            borderRadius: 'var(--radius-xs)',
+            color: 'var(--text-primary)',
+            fontSize: 12,
+            fontWeight: 500,
+          }}
+        >
+          {value}
+        </div>
+        <button
+          className="stepper-btn"
+          disabled={value >= max}
+          style={{
+            ...stepperStyle,
+            color: value >= max ? 'var(--text-tertiary)' : 'var(--accent-blue)',
+            cursor: value >= max ? 'default' : 'pointer',
+          }}
+          onClick={() => onChange(Math.min(max, value + step))}
+        >
+          +
+        </button>
+        <span className="text-caption-1 ml-1" style={{ color: 'var(--text-tertiary)' }}>{unit}</span>
       </div>
     </div>
   )
@@ -184,6 +224,10 @@ export default function SettingsPanel() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const historyRef = useRef<HTMLDivElement>(null)
 
+  const [pendingPomodoro, setPendingPomodoro] = useState(pomodoro)
+  const [pendingApp, setPendingApp] = useState(app)
+  const [isDirty, setIsDirty] = useState(false)
+
   useEffect(() => {
     fs.getStorageDir().then(setEffectiveDir)
   }, [storageDir])
@@ -198,6 +242,38 @@ export default function SettingsPanel() {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [historyOpen])
+
+  useEffect(() => {
+    if (!isDirty) {
+      setPendingPomodoro(pomodoro)
+      setPendingApp(app)
+    }
+  }, [pomodoro, app, isDirty])
+
+  const checkDirty = (newPom: typeof pomodoro, newApp: typeof app) => {
+    const pomChanged = (Object.keys(newPom) as (keyof typeof newPom)[]).some(
+      (k) => newPom[k] !== pomodoro[k]
+    )
+    const appChanged = (Object.keys(newApp) as (keyof typeof newApp)[]).some(
+      (k) => newApp[k] !== app[k]
+    )
+    setIsDirty(pomChanged || appChanged)
+  }
+
+  const handleSave = async () => {
+    await Promise.all([
+      updatePomodoro(pendingPomodoro),
+      updateApp(pendingApp),
+    ])
+    setIsDirty(false)
+    flashSave()
+  }
+
+  const handleReset = () => {
+    setPendingPomodoro(pomodoro)
+    setPendingApp(app)
+    setIsDirty(false)
+  }
 
   const flashSave = () => {
     setSaved(true)
@@ -241,7 +317,7 @@ export default function SettingsPanel() {
       }
       exportData.notes = notesWithContent
 
-      exportData.settings = { storageDir, pomodoro, app }
+      exportData.settings = { storageDir, pomodoro: pendingPomodoro, app: pendingApp }
       exportData.timer = await store.get('timer')
       exportData.timerHistory = await store.get('timerHistory')
 
@@ -286,15 +362,39 @@ export default function SettingsPanel() {
 
   return (
     <div className="flex flex-col">
-      {/* Save indicator toast */}
+      {/* Unsaved changes bar + Save button */}
+      <div
+        className="flex items-center justify-between"
+        style={{
+          padding: isDirty ? '8px 0' : 0,
+          marginBottom: isDirty ? 8 : 0,
+          opacity: isDirty ? 1 : 0,
+          maxHeight: isDirty ? 60 : 0,
+          overflow: 'hidden',
+          transform: isDirty ? 'translateY(0)' : 'translateY(-8px)',
+          transition: 'opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1), padding 0.25s cubic-bezier(0.16, 1, 0.3, 1), margin 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+          pointerEvents: isDirty ? 'auto' : 'none',
+        }}
+      >
+        <span className="text-caption-1" style={{ color: 'var(--accent-orange)' }}>
+          未保存的更改
+        </span>
+        <div className="flex gap-2">
+          <button onClick={handleReset} style={btnGhost}>重置</button>
+          <button onClick={handleSave} style={btnPrimary}>保存</button>
+        </div>
+      </div>
+
+      {/* Saved confirmation toast */}
       {saved && (
         <div
-          className="flex items-center justify-center mb-3"
+          className="flex items-center justify-center"
           style={{
             padding: '6px 16px',
             background: 'rgba(48,209,88,0.12)',
             borderRadius: 'var(--radius-full)',
             alignSelf: 'center',
+            marginBottom: 8,
           }}
         >
           <span className="text-caption-1 font-medium" style={{ color: 'var(--accent-green)' }}>已保存</span>
@@ -378,16 +478,13 @@ export default function SettingsPanel() {
                       useNoteStore.getState().load()
                       flashSave()
                     }}
-                    className="text-caption-1 font-mono truncate"
+                    className="text-caption-1 font-mono truncate hover-tertiary-bg"
                     style={{
                       padding: '8px 12px',
                       color: dir === storageDir ? 'var(--accent-blue)' : 'var(--text-secondary)',
                       background: dir === storageDir ? 'rgba(10,132,255,0.08)' : 'transparent',
                       cursor: 'pointer',
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-tertiary)' }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = dir === storageDir ? 'rgba(10,132,255,0.08)' : 'transparent'
+                      transition: 'background 0.15s ease',
                     }}
                   >
                     {dir}
@@ -395,15 +492,15 @@ export default function SettingsPanel() {
                 ))}
                 <div
                   onClick={() => { setHistoryOpen(false); handlePickDir() }}
+                  className="hover-tertiary-bg"
                   style={{
                     padding: '8px 12px',
                     color: 'var(--accent-blue)',
                     cursor: 'pointer',
                     borderTop: '1px solid var(--separator)',
                     fontSize: 12,
+                    transition: 'background 0.15s ease',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-tertiary)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
                 >
                   选择其他目录...
                 </div>
@@ -424,27 +521,31 @@ export default function SettingsPanel() {
       >
         <NumberInputRow
           label="专注时长"
-          value={pomodoro.focusDuration}
+          value={pendingPomodoro.focusDuration}
           unit="分钟"
-          onChange={(v) => { updatePomodoro({ focusDuration: v }); flashSave() }}
+          min={1} max={120}
+          onChange={(v) => { const next = { ...pendingPomodoro, focusDuration: v }; setPendingPomodoro(next); checkDirty(next, pendingApp) }}
         />
         <NumberInputRow
           label="短休息"
-          value={pomodoro.shortBreak}
+          value={pendingPomodoro.shortBreak}
           unit="分钟"
-          onChange={(v) => { updatePomodoro({ shortBreak: v }); flashSave() }}
+          min={1} max={30}
+          onChange={(v) => { const next = { ...pendingPomodoro, shortBreak: v }; setPendingPomodoro(next); checkDirty(next, pendingApp) }}
         />
         <NumberInputRow
           label="长休息"
-          value={pomodoro.longBreak}
+          value={pendingPomodoro.longBreak}
           unit="分钟"
-          onChange={(v) => { updatePomodoro({ longBreak: v }); flashSave() }}
+          min={5} max={60}
+          onChange={(v) => { const next = { ...pendingPomodoro, longBreak: v }; setPendingPomodoro(next); checkDirty(next, pendingApp) }}
         />
         <NumberInputRow
           label="轮次"
-          value={pomodoro.roundsBeforeLongBreak}
+          value={pendingPomodoro.roundsBeforeLongBreak}
           unit="轮后长休息"
-          onChange={(v) => { updatePomodoro({ roundsBeforeLongBreak: v }); flashSave() }}
+          min={2} max={10}
+          onChange={(v) => { const next = { ...pendingPomodoro, roundsBeforeLongBreak: v }; setPendingPomodoro(next); checkDirty(next, pendingApp) }}
         />
       </SettingsGroup>
 
@@ -456,13 +557,13 @@ export default function SettingsPanel() {
       >
         <ToggleRow
           label="开机自启动"
-          value={app.autoStart}
-          onChange={(v) => { updateApp({ autoStart: v }); flashSave() }}
+          value={pendingApp.autoStart}
+          onChange={(v) => { const next = { ...pendingApp, autoStart: v }; setPendingApp(next); checkDirty(pendingPomodoro, next) }}
         />
         <ToggleRow
           label="关闭时最小化到托盘"
-          value={app.closeToTray}
-          onChange={(v) => { updateApp({ closeToTray: v }); flashSave() }}
+          value={pendingApp.closeToTray}
+          onChange={(v) => { const next = { ...pendingApp, closeToTray: v }; setPendingApp(next); checkDirty(pendingPomodoro, next) }}
         />
         <div className="flex items-center justify-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--separator)' }}>
           <span className="text-caption-1" style={{ color: 'var(--text-primary)' }}>快速捕获快捷键</span>

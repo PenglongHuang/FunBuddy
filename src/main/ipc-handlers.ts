@@ -3,7 +3,7 @@ import { readFile, writeFile, unlink, readdir, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { getStore } from './store'
-import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode } from './window'
+import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode, startPetCursorTracking, stopPetCursorTracking, setPetDragging } from './window'
 import { IPC } from '../shared/ipc-channels'
 
 export function registerIpcHandlers(): void {
@@ -121,6 +121,13 @@ export function registerIpcHandlers(): void {
     collapseToPetMode(petX, petY)
   })
 
+  ipcMain.handle(IPC.WINDOW_INVALIDATE, () => {
+    const win = getMainWindow()
+    if (win) {
+      win.webContents.invalidate()
+    }
+  })
+
   // Notification
   ipcMain.handle(IPC.NOTIFICATION_SHOW, (_e, title: string, body: string) => {
     new Notification({ title, body }).show()
@@ -163,5 +170,19 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.AUTOLAUNCH_DISABLE, () => {
     app.setLoginItemSettings({ openAtLogin: false })
+  })
+
+  // Pet cursor tracking
+  ipcMain.handle(IPC.PET_START_TRACKING, () => {
+    const win = getMainWindow()
+    if (win) startPetCursorTracking(win)
+  })
+
+  ipcMain.handle(IPC.PET_STOP_TRACKING, () => {
+    stopPetCursorTracking()
+  })
+
+  ipcMain.handle(IPC.PET_SET_DRAGGING, (_e, dragging: boolean) => {
+    setPetDragging(dragging)
   })
 }

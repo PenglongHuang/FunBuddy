@@ -46,6 +46,7 @@ export default function PlanList() {
   const [editMode, setEditMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = useState<TabKey>('all')
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'single'; id: string } | { type: 'batch' } | null>(null)
 
   const filteredPlans = useMemo(() => {
     if (activeTab === 'all') return plans
@@ -85,11 +86,9 @@ export default function PlanList() {
     }
   }
 
-  const handleBatchDelete = async () => {
+  const handleBatchDelete = () => {
     if (selectedIds.size === 0) return
-    await deletePlans(Array.from(selectedIds))
-    setSelectedIds(new Set())
-    setEditMode(false)
+    setDeleteTarget({ type: 'batch' })
   }
 
   const exitEditMode = () => {
@@ -103,15 +102,27 @@ export default function PlanList() {
     setShowCreateDialog(false)
   }
 
-  const handleSingleDelete = async (id: string) => {
-    await deletePlan(id)
-    if (selectedIds.has(id)) {
+  const handleSingleDelete = (id: string) => {
+    setDeleteTarget({ type: 'single', id })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    if (deleteTarget.type === 'single') {
+      await deletePlan(deleteTarget.id)
+      if (activePlanId === deleteTarget.id) setActivePlan(null)
       setSelectedIds((prev) => {
         const next = new Set(prev)
-        next.delete(id)
+        next.delete(deleteTarget.id)
         return next
       })
+    } else {
+      await deletePlans(Array.from(selectedIds))
+      if (activePlanId && selectedIds.has(activePlanId)) setActivePlan(null)
+      setSelectedIds(new Set())
+      setEditMode(false)
     }
+    setDeleteTarget(null)
   }
 
   return (
@@ -122,6 +133,7 @@ export default function PlanList() {
           <>
             <button
               onClick={toggleSelectAll}
+              className="hover-blue-bg"
               style={{
                 background: 'none',
                 border: 'none',
@@ -134,8 +146,6 @@ export default function PlanList() {
                 borderRadius: 'var(--radius-sm)',
                 transition: 'background 0.15s ease',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(10,132,255,0.10)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
             >
               {allSelected ? <CheckSquare size={15} /> : <Square size={15} />}
               <span style={{ fontSize: 12, fontWeight: 500 }}>全选</span>
@@ -165,6 +175,7 @@ export default function PlanList() {
               {plans.length > 0 && (
                 <button
                   onClick={() => setEditMode(true)}
+                  className="hover-blue-lift"
                   style={{
                     fontSize: 12,
                     color: 'var(--text-tertiary)',
@@ -174,14 +185,6 @@ export default function PlanList() {
                     padding: '4px 8px',
                     borderRadius: 'var(--radius-sm)',
                     transition: 'color 0.15s ease, background 0.15s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = 'var(--accent-blue)'
-                    e.currentTarget.style.background = 'rgba(10,132,255,0.10)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = 'var(--text-tertiary)'
-                    e.currentTarget.style.background = 'transparent'
                   }}
                 >
                   管理
@@ -467,6 +470,86 @@ export default function PlanList() {
           onCancel={() => setShowCreateDialog(false)}
         />
       )}
+
+      {/* Delete confirmation dialog */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 100,
+            }}
+            onClick={() => setDeleteTarget(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: 280,
+                background: 'var(--bg-secondary)',
+                borderRadius: 'var(--radius-xl)',
+                padding: 20,
+                boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              }}
+            >
+              <span style={{ font: 'var(--text-headline)', color: 'var(--text-primary)', fontWeight: 600, display: 'block', marginBottom: 8 }}>
+                确认删除
+              </span>
+              <span style={{ font: 'var(--text-caption-1)', color: 'var(--text-secondary)', display: 'block', marginBottom: 20 }}>
+                {deleteTarget.type === 'batch'
+                  ? `确定要删除选中的 ${selectedIds.size} 个计划吗？此操作不可撤销。`
+                  : '确定要删除这个计划吗？此操作不可撤销。'}
+              </span>
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  style={{
+                    padding: '0 16px',
+                    height: 34,
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: 13,
+                    fontWeight: 500,
+                    background: 'transparent',
+                    color: 'var(--text-secondary)',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  style={{
+                    padding: '0 20px',
+                    height: 34,
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    background: 'var(--accent-pink)',
+                    color: 'white',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  删除
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
