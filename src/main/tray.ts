@@ -4,59 +4,57 @@ import { readFileSync } from 'fs'
 
 let tray: Tray | null = null
 
-function createFallbackIcon(): Electron.NativeImage {
-  // Create a 32x32 RGBA buffer for a simple colored icon
-  const size = 32
-  const bufferSize = size * size * 4
-  const buffer = Buffer.alloc(bufferSize)
+function pointInPolygon(px: number, py: number, polygon: [number, number][]): boolean {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i]
+    const [xj, yj] = polygon[j]
+    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+      inside = !inside
+    }
+  }
+  return inside
+}
 
-  // Dark rounded-square background (#1C1C1E) with a colored circle center
+function createFallbackIcon(): Electron.NativeImage {
+  const size = 48
+  const buffer = Buffer.alloc(size * size * 4)
   const cx = size / 2
   const cy = size / 2
-  const outerR = size / 2 - 1
-  const innerR = size / 2 - 6
+
+  const outerR = 22
+  const innerR = 9
+  const vertices: [number, number][] = []
+  for (let i = 0; i < 5; i++) {
+    const outerAngle = -Math.PI / 2 + (i * 2 * Math.PI) / 5
+    vertices.push([cx + outerR * Math.cos(outerAngle), cy + outerR * Math.sin(outerAngle)])
+    const innerAngle = outerAngle + Math.PI / 5
+    vertices.push([cx + innerR * Math.cos(innerAngle), cy + innerR * Math.sin(innerAngle)])
+  }
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const idx = (y * size + x) * 4
-      const dx = x - cx
-      const dy = y - cy
-      const dist = Math.sqrt(dx * dx + dy * dy)
+      if (pointInPolygon(x, y, vertices)) {
+        const t = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) / outerR
+        buffer[idx] = 255
+        buffer[idx + 1] = Math.round(230 - t * 30)
+        buffer[idx + 2] = Math.round(60 - t * 40)
+        buffer[idx + 3] = 255
 
-      if (dist <= outerR) {
-        // Inside rounded square area — dark background
-        buffer[idx] = 28     // R
-        buffer[idx + 1] = 28 // G
-        buffer[idx + 2] = 30 // B
-        buffer[idx + 3] = 240 // A
-
-        // Draw gradient circle (pet face)
-        if (dist <= innerR) {
-          const t = dist / innerR
-          // Purple-blue gradient: #667eea → #764ba2
-          buffer[idx] = Math.round(102 + (118 - 102) * t)
-          buffer[idx + 1] = Math.round(126 + (75 - 126) * t)
-          buffer[idx + 2] = Math.round(234 + (162 - 234) * t)
-          buffer[idx + 3] = 255
-        }
-
-        // Eyes
-        const leftEyeX = cx - 5
-        const rightEyeX = cx + 5
-        const eyeY = cy - 2
-        const eyeR = 2.5
-
+        const leftEyeX = cx - 4.5
+        const rightEyeX = cx + 4.5
+        const eyeY = cy + 1.5
+        const eyeR = 2.8
         const isLeftEye = Math.sqrt((x - leftEyeX) ** 2 + (y - eyeY) ** 2) <= eyeR
         const isRightEye = Math.sqrt((x - rightEyeX) ** 2 + (y - eyeY) ** 2) <= eyeR
 
-        if ((isLeftEye || isRightEye) && dist <= innerR) {
-          buffer[idx] = 30
-          buffer[idx + 1] = 30
-          buffer[idx + 2] = 30
-          buffer[idx + 3] = 220
+        if (isLeftEye || isRightEye) {
+          buffer[idx] = 93
+          buffer[idx + 1] = 64
+          buffer[idx + 2] = 55
         }
       } else {
-        // Transparent outside
         buffer[idx + 3] = 0
       }
     }
@@ -78,7 +76,7 @@ function loadIcon(): Electron.NativeImage {
     try {
       const buf = readFileSync(path)
       const img = nativeImage.createFromBuffer(buf)
-      if (!img.isEmpty()) return img.resize({ width: 22, height: 22 })
+      if (!img.isEmpty()) return img.resize({ width: 32, height: 32 })
     } catch {
       // Try next candidate
     }
@@ -86,7 +84,7 @@ function loadIcon(): Electron.NativeImage {
 
   // Fallback: programmatic icon
   console.warn('Using fallback tray icon')
-  return createFallbackIcon().resize({ width: 22, height: 22 })
+  return createFallbackIcon().resize({ width: 32, height: 32 })
 }
 
 export function createTray(): void {

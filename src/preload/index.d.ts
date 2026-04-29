@@ -25,6 +25,11 @@ export interface FunPetsAPI {
   autolaunchEnable: () => Promise<void>
   autolaunchDisable: () => Promise<void>
   onQuickCapture: (callback: () => void) => () => void
+  windowInvalidate: () => Promise<void>
+  startPetTracking: () => Promise<void>
+  stopPetTracking: () => Promise<void>
+  setPetDragging: (dragging: boolean) => Promise<void>
+  onPetCursorHover: (callback: (hovered: boolean) => void) => () => void
 }
 
 declare global {

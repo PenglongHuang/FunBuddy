@@ -19,6 +19,7 @@ export const IPC = {
   WINDOW_MOVE_BY: 'window:moveBy',
   WINDOW_EXPAND_PANEL: 'window:expandPanel',
   WINDOW_COLLAPSE_PET: 'window:collapsePet',
+  WINDOW_INVALIDATE: 'window:invalidate',
   NOTIFICATION_SHOW: 'notification:show',
   DIALOG_OPEN_DIRECTORY: 'dialog:openDirectory',
   DIALOG_SHOW_SAVE_DIALOG: 'dialog:showSaveDialog',
@@ -27,4 +28,8 @@ export const IPC = {
   AUTOLAUNCH_ENABLE: 'autolaunch:enable',
   AUTOLAUNCH_DISABLE: 'autolaunch:disable',
   HOTKEY_QUICK_CAPTURE: 'hotkey:quickCapture',
+  PET_CURSOR_HOVER: 'pet:cursor-hover',
+  PET_START_TRACKING: 'pet:startTracking',
+  PET_STOP_TRACKING: 'pet:stopTracking',
+  PET_SET_DRAGGING: 'pet:setDragging',
 } as const

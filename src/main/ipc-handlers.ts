@@ -3,7 +3,7 @@ import { readFile, writeFile, unlink, readdir, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { getStore } from './store'
-import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode } from './window'
+import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode, startPetCursorTracking, stopPetCursorTracking, setPetDragging, movePetDrag } from './window'
 import { IPC } from '../shared/ipc-channels'
 
 export function registerIpcHandlers(): void {
@@ -106,11 +106,8 @@ export function registerIpcHandlers(): void {
     getMainWindow()?.setIgnoreMouseEvents(ignore, { forward: true })
   })
 
-  ipcMain.handle(IPC.WINDOW_MOVE_BY, (_e, dx: number, dy: number) => {
-    const win = getMainWindow()
-    if (!win) return
-    const [x, y] = win.getPosition()
-    win.setPosition(x + dx, y + dy)
+  ipcMain.on(IPC.WINDOW_MOVE_BY, (_e, cursorX: number, cursorY: number) => {
+    movePetDrag(cursorX, cursorY)
   })
 
   ipcMain.handle(IPC.WINDOW_EXPAND_PANEL, (_e, petX?: number, petY?: number) => {
@@ -119,6 +116,13 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.WINDOW_COLLAPSE_PET, (_e, petX?: number, petY?: number) => {
     collapseToPetMode(petX, petY)
+  })
+
+  ipcMain.handle(IPC.WINDOW_INVALIDATE, () => {
+    const win = getMainWindow()
+    if (win) {
+      win.webContents.invalidate()
+    }
   })
 
   // Notification
@@ -163,5 +167,19 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.AUTOLAUNCH_DISABLE, () => {
     app.setLoginItemSettings({ openAtLogin: false })
+  })
+
+  // Pet cursor tracking
+  ipcMain.handle(IPC.PET_START_TRACKING, () => {
+    const win = getMainWindow()
+    if (win) startPetCursorTracking(win)
+  })
+
+  ipcMain.handle(IPC.PET_STOP_TRACKING, () => {
+    stopPetCursorTracking()
+  })
+
+  ipcMain.handle(IPC.PET_SET_DRAGGING, (_e, dragging: boolean, cursorX?: number, cursorY?: number) => {
+    setPetDragging(dragging, cursorX, cursorY)
   })
 }

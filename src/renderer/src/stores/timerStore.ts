@@ -113,12 +113,7 @@ export const useTimerStore = create<TimerStore>()(
         longBreak: settings.longBreak * 60 * 1000,
       }
 
-      if (phase === 'focus') {
-        const totalMs = durations[nextPhase]
-        set({ status: 'running', phase: nextPhase, round: newRound, remainingMs: totalMs, totalMs })
-      } else {
-        set({ status: 'idle', phase: nextPhase, round: newRound, remainingMs: 0, totalMs: 0 })
-      }
+      set({ status: 'idle', phase: nextPhase, round: newRound, remainingMs: 0, totalMs: 0 })
       get()._persist()
 
       setTimeout(() => {

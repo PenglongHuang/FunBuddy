@@ -3,7 +3,6 @@ import { X } from 'lucide-react'
 import PanelRouter from './PanelRouter'
 import IconStrip from './IconStrip'
 import PetAvatar from '@/components/pet/PetAvatar'
-import StateIndicator from '@/components/pet/StateIndicator'
 import { usePetStore } from '@/stores/petStore'
 import { motion } from 'motion/react'
 
@@ -38,10 +37,7 @@ export default function Sidebar() {
       >
         {/* Pet */}
         <div className="flex flex-col items-center" style={{ marginBottom: 6 }}>
-          <PetAvatar size={52} onClick={() => setWindowMode('pet')} />
-          <div style={{ marginTop: 3 }}>
-            <StateIndicator />
-          </div>
+          <PetAvatar size={52} showTimer={false} onClick={() => setWindowMode('pet')} />
         </div>
 
         {/* Separator */}

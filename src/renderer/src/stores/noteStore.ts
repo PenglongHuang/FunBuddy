@@ -17,6 +17,9 @@ interface NoteStore {
   saveNoteContent: (id: string, content: string) => Promise<void>
   loadNoteContent: (id: string) => Promise<string>
   updateNoteTags: (id: string, tags: string[]) => Promise<void>
+  updateNoteTitle: (id: string, title: string) => Promise<void>
+  renameTag: (oldName: string, newName: string) => Promise<void>
+  deleteTag: (tagName: string) => Promise<void>
   setActiveNote: (id: string | null) => void
 }
 
@@ -97,6 +100,42 @@ export const useNoteStore = create<NoteStore>()(
         if (!note) return
         note.tags = tags
         note.updatedAt = new Date().toISOString()
+      })
+      await fs.writeFile('notes/index.json', JSON.stringify(get().notes, null, 2))
+    },
+
+    updateNoteTitle: async (id, title) => {
+      set((s) => {
+        const note = s.notes.find((n) => n.id === id)
+        if (!note) return
+        note.title = title
+        note.updatedAt = new Date().toISOString()
+      })
+      await fs.writeFile('notes/index.json', JSON.stringify(get().notes, null, 2))
+    },
+
+    renameTag: async (oldName, newName) => {
+      const trimmed = newName.trim()
+      if (!trimmed) return
+      set((s) => {
+        for (const note of s.notes) {
+          if (note.tags) {
+            note.tags = note.tags.map((t) => (t === oldName ? trimmed : t))
+            note.updatedAt = new Date().toISOString()
+          }
+        }
+      })
+      await fs.writeFile('notes/index.json', JSON.stringify(get().notes, null, 2))
+    },
+
+    deleteTag: async (tagName) => {
+      set((s) => {
+        for (const note of s.notes) {
+          if (note.tags) {
+            note.tags = note.tags.filter((t) => t !== tagName)
+            note.updatedAt = new Date().toISOString()
+          }
+        }
       })
       await fs.writeFile('notes/index.json', JSON.stringify(get().notes, null, 2))
     },

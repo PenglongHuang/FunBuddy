@@ -27,7 +27,7 @@ export default function PlannerPanel() {
           borderRadius: 'var(--radius-full)',
         }}
       >
-        {([['list', LayoutList, '列表'], ['calendar', CalendarDays, '日历']] as const).map(([key, Icon, label]) => (
+        {([['list', LayoutList, '计划列表'], ['calendar', CalendarDays, '日历']] as const).map(([key, Icon, label]) => (
           <motion.button
             key={key}
             onClick={() => setView(key)}

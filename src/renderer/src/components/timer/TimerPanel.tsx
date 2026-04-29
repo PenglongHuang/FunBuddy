@@ -3,11 +3,9 @@ import { motion } from 'motion/react'
 import TimerRing from './TimerRing'
 import TimerControls from './TimerControls'
 import { useTimerStore } from '@/stores/timerStore'
-import { useTimer } from '@/hooks/useTimer'
 
 export default function TimerPanel() {
   const timer = useTimerStore((s) => s)
-  useTimer()
 
   useEffect(() => {
     timer._loadPersisted()
@@ -49,8 +47,8 @@ export default function TimerPanel() {
         <StatCard
           value={timer.todayCount}
           label="完成轮数"
-          color="var(--accent-orange)"
-          bgColor="rgba(255,159,10,0.10)"
+          color="var(--accent-teal)"
+          bgColor="rgba(100,210,255,0.10)"
         />
         <StatCard
           value={timer.todayMinutes}

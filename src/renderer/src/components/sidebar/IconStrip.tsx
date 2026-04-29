@@ -47,6 +47,18 @@ export default function IconStrip({ activePanel, onToggle }: IconStripProps) {
               transition: 'color 0.2s ease, background 0.2s ease',
               position: 'relative',
             }}
+            onMouseEnter={(e) => {
+              if (!isActive) {
+                e.currentTarget.style.color = 'var(--accent-blue)'
+                e.currentTarget.style.background = 'rgba(10,132,255,0.08)'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isActive) {
+                e.currentTarget.style.color = 'var(--text-quaternary)'
+                e.currentTarget.style.background = 'transparent'
+              }
+            }}
           >
             <ItemIcon size={19} strokeWidth={1.7} />
             {isActive && (

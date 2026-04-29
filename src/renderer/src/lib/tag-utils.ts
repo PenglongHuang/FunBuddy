@@ -4,7 +4,7 @@ const TAG_ACCENT_COLORS = [
   '#0A84FF', // --accent-blue
   '#BF5AF2', // --accent-purple
   '#FF375F', // --accent-pink
-  '#FF9F0A', // --accent-orange
+  '#FF6B6B', // coral
   '#FFD60A', // --accent-yellow
   '#30D158', // --accent-green
   '#64D2FF', // --accent-teal
