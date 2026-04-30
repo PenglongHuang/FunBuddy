@@ -4,9 +4,10 @@ import MarkdownEditor from '@/components/common/MarkdownEditor'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
 import { Plus, Trash2, Eye, Edit3, FileText, CheckSquare, Square } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
-import TagFilterBar from './TagFilterBar'
-import TagInput from './TagInput'
+import TagFilterBar from '@/components/common/TagFilterBar'
+import TagInput from '@/components/common/TagInput'
 import { getTagColor, getAllTags } from '@/lib/tag-utils'
+import { usePlanStore } from '@/stores/planStore'
 
 export default function NotesPanel() {
   const notes = useNoteStore((s) => s.notes)
@@ -20,6 +21,10 @@ export default function NotesPanel() {
   const loadNoteContent = useNoteStore((s) => s.loadNoteContent)
   const updateNoteTags = useNoteStore((s) => s.updateNoteTags)
   const setActiveNote = useNoteStore((s) => s.setActiveNote)
+  const renameNoteTag = useNoteStore((s) => s.renameTag)
+  const deleteNoteTag = useNoteStore((s) => s.deleteTag)
+  const renamePlanTag = usePlanStore((s) => s.renameTag)
+  const deletePlanTag = usePlanStore((s) => s.deleteTag)
 
   const [content, setContent] = useState('')
   const [editing, setEditing] = useState(false)
@@ -68,18 +73,13 @@ export default function NotesPanel() {
     setEditing(true)
   }
 
-  const handleAddTag = useCallback(async (tag: string) => {
-    if (!activeNoteId) return
-    const current = activeNote?.tags ?? []
-    if (current.includes(tag)) return
-    await updateNoteTags(activeNoteId, [...current, tag])
-  }, [activeNoteId, activeNote, updateNoteTags])
+  const handleRenameTag = useCallback(async (oldName: string, newName: string) => {
+    await Promise.all([renameNoteTag(oldName, newName), renamePlanTag(oldName, newName)])
+  }, [renameNoteTag, renamePlanTag])
 
-  const handleRemoveTag = useCallback(async (tag: string) => {
-    if (!activeNoteId) return
-    const current = activeNote?.tags ?? []
-    await updateNoteTags(activeNoteId, current.filter((t) => t !== tag))
-  }, [activeNoteId, activeNote, updateNoteTags])
+  const handleDeleteTag = useCallback(async (tagName: string) => {
+    await Promise.all([deleteNoteTag(tagName), deletePlanTag(tagName)])
+  }, [deleteNoteTag, deletePlanTag])
 
   const visibleIds = useMemo(() => new Set(filteredNotes.map((n) => n.id)), [filteredNotes])
   const allSelected = filteredNotes.length > 0 && filteredNotes.every((n) => selectedIds.has(n.id))
@@ -186,8 +186,8 @@ export default function NotesPanel() {
         {/* Tag management */}
         <TagInput
           tags={activeNote.tags ?? []}
-          onAdd={handleAddTag}
-          onRemove={handleRemoveTag}
+          allTags={allTags}
+          onUpdateTags={(tags) => updateNoteTags(activeNoteId, tags)}
         />
 
         {/* Editor / Preview */}
@@ -332,6 +332,8 @@ export default function NotesPanel() {
           tags={tagFilterItems}
           activeTag={activeTag}
           onSelect={setActiveTag}
+          onRenameTag={handleRenameTag}
+          onDeleteTag={handleDeleteTag}
         />
       )}
 
