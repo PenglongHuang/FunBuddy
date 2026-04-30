@@ -23,7 +23,7 @@ function showQuickCapture(): void {
 
   quickCaptureWin = new BrowserWindow({
     width: 300,
-    height: 80,
+    height: 160,
     frame: false,
     transparent: true,
     alwaysOnTop: true,

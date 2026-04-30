@@ -7,66 +7,99 @@ import { usePanelMorph } from '@/hooks/usePanelMorph'
 import { useTimer } from '@/hooks/useTimer'
 import { usePetStore } from '@/stores/petStore'
 import { fs } from '@/lib/ipc'
-import { nanoid } from 'nanoid'
-
 function QuickCapture() {
-  const [input, setInput] = useState('')
+  const [title, setTitle] = useState('')
+  const [content, setContent] = useState('')
 
   useEffect(() => {
-    const cleanup = window.api.onQuickCapture(() => setInput(''))
+    const cleanup = window.api.onQuickCapture(() => {
+      setTitle('')
+      setContent('')
+    })
     return cleanup
   }, [])
 
   const submit = async () => {
-    if (!input.trim()) return
-    const id = nanoid(8)
-    const title = input.split('\n')[0].slice(0, 30) || new Date().toLocaleString('zh-CN')
-    const filePath = `notes/${id}-quick-capture.md`
-    const now = new Date().toISOString()
-    await fs.writeFile(filePath, `# ${title}\n\n${input}`)
-    const COLOR_PALETTE = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981']
-    let notes: any[] = []
-    try { notes = JSON.parse(await fs.readFile('notes/index.json')) } catch {}
-    notes.push({ id, title, filePath, color: COLOR_PALETTE[notes.length % 5], tags: [], createdAt: now, updatedAt: now })
-    await fs.writeFile('notes/index.json', JSON.stringify(notes, null, 2))
-    setInput('')
+    if (!title.trim()) return
+    const { useNoteStore } = await import('@/stores/noteStore')
+    await useNoteStore.getState().createNote(title, content, ['快捷笔记'])
+    setTitle('')
+    setContent('')
     window.close()
   }
 
   return (
     <div
-      className="w-full h-full flex flex-col gap-2 items-center justify-center"
+      className="w-full h-full flex flex-col"
       style={{
-        background: 'var(--bg-base)',
+        background: 'rgba(28, 28, 30, 0.95)',
         backdropFilter: 'blur(60px) saturate(180%)',
         WebkitBackdropFilter: 'blur(60px) saturate(180%)',
         borderRadius: 'var(--radius-xl)',
         border: '0.5px solid rgba(255,255,255,0.12)',
-        padding: 20,
+        padding: '12px 14px',
+        gap: 8,
       }}
     >
       <input
         autoFocus
-        className="w-full text-body text-primary outline-none placeholder:text-quaternary bg-transparent"
+        className="w-full text-primary outline-none bg-transparent"
         style={{
-          background: 'var(--bg-tertiary)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '10px 14px',
-          border: '1px solid transparent',
-          fontSize: 15,
+          font: 'var(--text-callout)',
+          fontWeight: 500,
+          border: 'none',
+          borderBottom: '0.5px solid var(--separator)',
+          paddingBottom: 8,
         }}
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && submit()}
-        placeholder="快速捕获..."
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            submit()
+          }
+        }}
+        placeholder="标题"
       />
-      <button
-        onClick={submit}
-        className="text-caption-1 font-medium px-4 py-2 rounded-lg"
-        style={{ color: 'var(--accent-blue)' }}
-      >
-        保存
-      </button>
+      <textarea
+        className="w-full flex-1 text-primary outline-none bg-transparent resize-none"
+        style={{
+          font: 'var(--text-footnote)',
+          color: 'var(--text-secondary)',
+          border: 'none',
+          minHeight: 48,
+        }}
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        placeholder="内容..."
+      />
+      <div className="flex items-center justify-between shrink-0">
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 500,
+            padding: '2px 8px',
+            borderRadius: 'var(--radius-full)',
+            background: 'rgba(10,132,255,0.15)',
+            color: '#0A84FF',
+          }}
+        >
+          快捷笔记
+        </span>
+        <button
+          onClick={submit}
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: '#0A84FF',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          保存 ↵
+        </button>
+      </div>
     </div>
   )
 }
