@@ -4,6 +4,7 @@ import { useNoteStore } from '@/stores/noteStore'
 import { dialog, fs, store } from '@/lib/ipc'
 import { FolderOpen, Timer, Zap, Database, ChevronDown } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
+import { useToast } from '@/components/common/Toast'
 
 /* ============================================
    iOS/macOS-style Toggle Switch
@@ -219,7 +220,7 @@ export default function SettingsPanel() {
   const setStorageDir = useSettingsStore((s) => s.setStorageDir)
   const updatePomodoro = useSettingsStore((s) => s.updatePomodoro)
   const updateApp = useSettingsStore((s) => s.updateApp)
-  const [saved, setSaved] = useState(false)
+  const { showToast, ToastContainer } = useToast()
   const [effectiveDir, setEffectiveDir] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
   const historyRef = useRef<HTMLDivElement>(null)
@@ -266,7 +267,7 @@ export default function SettingsPanel() {
       updateApp(pendingApp),
     ])
     setIsDirty(false)
-    flashSave()
+    showToast('已保存', 1500)
   }
 
   const handleReset = () => {
@@ -275,18 +276,13 @@ export default function SettingsPanel() {
     setIsDirty(false)
   }
 
-  const flashSave = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1500)
-  }
-
   const handlePickDir = async () => {
     const dir = await dialog.openDirectory()
     if (dir) {
       await setStorageDir(dir)
       usePlanStore.getState().load()
       useNoteStore.getState().load()
-      flashSave()
+      showToast('已保存', 1500)
     }
   }
 
@@ -322,7 +318,7 @@ export default function SettingsPanel() {
       exportData.timerHistory = await store.get('timerHistory')
 
       await fs.writeFileAbsolute(filePath, JSON.stringify(exportData, null, 2))
-      flashSave()
+      showToast('已保存', 1500)
     } catch (err) {
       await dialog.showMessageBox({
         type: 'error',
@@ -357,11 +353,13 @@ export default function SettingsPanel() {
 
     usePlanStore.getState().load()
     useNoteStore.getState().load()
-    flashSave()
+    showToast('已保存', 1500)
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col" style={{ position: 'relative' }}>
+      <ToastContainer />
+
       {/* Unsaved changes bar + Save button */}
       <div
         className="flex items-center justify-between"
@@ -384,22 +382,6 @@ export default function SettingsPanel() {
           <button onClick={handleSave} style={btnPrimary}>保存</button>
         </div>
       </div>
-
-      {/* Saved confirmation toast */}
-      {saved && (
-        <div
-          className="flex items-center justify-center"
-          style={{
-            padding: '6px 16px',
-            background: 'rgba(48,209,88,0.12)',
-            borderRadius: 'var(--radius-full)',
-            alignSelf: 'center',
-            marginBottom: 8,
-          }}
-        >
-          <span className="text-caption-1 font-medium" style={{ color: 'var(--accent-green)' }}>已保存</span>
-        </div>
-      )}
 
       {/* ===== Storage Group ===== */}
       <SettingsGroup
@@ -476,7 +458,7 @@ export default function SettingsPanel() {
                       setHistoryOpen(false)
                       usePlanStore.getState().load()
                       useNoteStore.getState().load()
-                      flashSave()
+                      showToast('已保存', 1500)
                     }}
                     className="text-caption-1 font-mono truncate hover-tertiary-bg"
                     style={{
