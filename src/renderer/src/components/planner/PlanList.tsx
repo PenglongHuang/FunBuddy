@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { usePlanStore } from '@/stores/planStore'
 import { Plus, Trash2, CheckSquare, Square, Calendar, CalendarDays, CalendarRange } from 'lucide-react'
 import TagFilterBar from '@/components/common/TagFilterBar'
@@ -17,7 +17,6 @@ const TABS: Array<{ key: TabKey; label: string; color: string }> = [
   { key: 'monthly', label: '月计划', color: '#fbbf24' },
 ]
 
-const TYPE_ICON: Record<string, React.ReactNode> = {}
 const TYPE_BADGE: Record<string, { bg: string; label: string }> = {
   daily: { bg: 'rgba(96,165,250,0.12)', label: '日' },
   weekly: { bg: 'rgba(192,132,252,0.12)', label: '周' },
@@ -80,13 +79,13 @@ export default function PlanList() {
     }))
   }, [plans])
 
-  const handleRenameTag = async (oldName: string, newName: string) => {
+  const handleRenameTag = useCallback(async (oldName: string, newName: string) => {
     await Promise.all([renamePlanTag(oldName, newName), renameNoteTag(oldName, newName)])
-  }
+  }, [renamePlanTag, renameNoteTag])
 
-  const handleDeleteTag = async (tagName: string) => {
+  const handleDeleteTag = useCallback(async (tagName: string) => {
     await Promise.all([deletePlanTag(tagName), deleteNoteTag(tagName)])
-  }
+  }, [deletePlanTag, deleteNoteTag])
 
   const visibleIds = useMemo(() => new Set(filteredPlans.map((p) => p.id)), [filteredPlans])
   const allSelected = filteredPlans.length > 0 && filteredPlans.every((p) => selectedIds.has(p.id))

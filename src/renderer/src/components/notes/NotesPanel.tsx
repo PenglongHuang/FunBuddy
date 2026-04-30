@@ -97,11 +97,15 @@ export default function NotesPanel() {
     if (allSelected) {
       setSelectedIds((prev) => {
         const next = new Set(prev)
-        for (const id of visibleIds) next.delete(id)
+        visibleIds.forEach((id) => next.delete(id))
         return next
       })
     } else {
-      setSelectedIds((prev) => new Set([...prev, ...visibleIds]))
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        visibleIds.forEach((id) => next.add(id))
+        return next
+      })
     }
   }
 
@@ -187,7 +191,7 @@ export default function NotesPanel() {
         <TagInput
           tags={activeNote.tags ?? []}
           allTags={allTags}
-          onUpdateTags={(tags) => updateNoteTags(activeNoteId, tags)}
+          onUpdateTags={(tags) => { if (activeNoteId) updateNoteTags(activeNoteId, tags) }}
         />
 
         {/* Editor / Preview */}
