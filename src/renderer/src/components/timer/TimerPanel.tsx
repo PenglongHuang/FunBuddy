@@ -1,19 +1,34 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'motion/react'
 import TimerRing from './TimerRing'
 import TimerControls from './TimerControls'
+import FocusStartDialog from './FocusStartDialog'
 import { useTimerStore } from '@/stores/timerStore'
 
 export default function TimerPanel() {
   const timer = useTimerStore((s) => s)
+  const [showStartDialog, setShowStartDialog] = useState(false)
 
   useEffect(() => {
     timer._loadPersisted()
     timer._loadHistory()
   }, [timer._loadPersisted, timer._loadHistory])
 
+  const handleStart = () => {
+    if (timer.phase === 'focus') {
+      setShowStartDialog(true)
+    } else {
+      timer.start()
+    }
+  }
+
+  const handleStartWithoutPlan = () => {
+    setShowStartDialog(false)
+    timer.start()
+  }
+
   return (
-    <div className="flex flex-col items-center gap-5">
+    <div className="flex flex-col items-center h-full gap-5">
       <TimerRing
         phase={timer.phase}
         remainingMs={timer.remainingMs}
@@ -25,7 +40,7 @@ export default function TimerPanel() {
       <TimerControls
         status={timer.status}
         onPause={() => timer.pause()}
-        onStart={() => timer.start()}
+        onStart={handleStart}
         onResume={() => timer.resume()}
         onSkip={() => timer.skip()}
         onReset={() => timer.reset()}
@@ -44,29 +59,21 @@ export default function TimerPanel() {
           marginTop: 4,
         }}
       >
-        <StatCard
-          value={timer.todayCount}
-          label="完成轮数"
-          color="var(--accent-teal)"
-          bgColor="rgba(100,210,255,0.10)"
-        />
-        <StatCard
-          value={timer.todayMinutes}
-          label="专注分钟"
-          color="var(--accent-blue)"
-          bgColor="rgba(10,132,255,0.10)"
-        />
+        <StatCard value={timer.todayCount} label="完成轮数" color="var(--accent-teal)" bgColor="rgba(100,210,255,0.10)" />
+        <StatCard value={timer.todayMinutes} label="专注分钟" color="var(--accent-blue)" bgColor="rgba(10,132,255,0.10)" />
       </motion.div>
+
+      {showStartDialog && (
+        <FocusStartDialog
+          onCancel={() => setShowStartDialog(false)}
+          onStartWithoutPlan={handleStartWithoutPlan}
+        />
+      )}
     </div>
   )
 }
 
-function StatCard({ value, label, color, bgColor }: {
-  value: number
-  label: string
-  color: string
-  bgColor: string
-}) {
+function StatCard({ value, label, color, bgColor }: { value: number; label: string; color: string; bgColor: string }) {
   return (
     <div
       style={{
