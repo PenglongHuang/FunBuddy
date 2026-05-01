@@ -1,11 +1,14 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { usePlanStore } from '@/stores/planStore'
-import { Plus, Trash2, CheckSquare, Square, Calendar, CalendarDays, CalendarRange } from 'lucide-react'
+import { Plus, Trash2, CheckSquare, Square, Calendar, CalendarDays, CalendarRange, MoreVertical } from 'lucide-react'
 import TagFilterBar from '@/components/common/TagFilterBar'
 import { getTagsWithCounts } from '@/lib/tag-utils'
 import { useNoteStore } from '@/stores/noteStore'
 import { motion, AnimatePresence } from 'motion/react'
 import PlanCreateDialog from './PlanCreateDialog'
+import PlanContextMenu from './PlanContextMenu'
+import { usePetStore } from '@/stores/petStore'
+import { useTimerStore } from '@/stores/timerStore'
 import type { PlanType, Plan } from '@/types/plan'
 
 type TabKey = 'all' | PlanType
@@ -54,6 +57,9 @@ export default function PlanList() {
   const [activeTab, setActiveTab] = useState<TabKey>('all')
   const [activeFilterTag, setActiveFilterTag] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'single'; id: string } | { type: 'batch' } | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ planId: string; rect: DOMRect } | null>(null)
+  const setActivePanel = usePetStore((s) => s.setActivePanel)
+  const setWindowMode = usePetStore((s) => s.setWindowMode)
 
   const filteredPlans = useMemo(() => {
     let result = plans
@@ -130,6 +136,12 @@ export default function PlanList() {
 
   const handleSingleDelete = (id: string) => {
     setDeleteTarget({ type: 'single', id })
+  }
+
+  const handleStartFocusFromPlan = (planId: string) => {
+    setActivePanel('timer')
+    setWindowMode('expanded')
+    useTimerStore.getState().startWithPlan(planId)
   }
 
   const confirmDelete = async () => {
@@ -429,26 +441,26 @@ export default function PlanList() {
                 )}
               </div>
 
-              {/* Delete */}
+              {/* More menu */}
               {!editMode && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleSingleDelete(plan.id) }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    setContextMenu({ planId: plan.id, rect })
+                  }}
                   style={{
-                    opacity: 0,
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text-quaternary)',
-                    cursor: 'pointer',
-                    padding: 4,
+                    opacity: 0, background: 'transparent', border: 'none',
+                    color: 'var(--text-quaternary)', cursor: 'pointer', padding: 4,
                     borderRadius: 'var(--radius-sm)',
                     transition: 'opacity 0.15s ease, color 0.15s ease',
                     flexShrink: 0,
                   }}
                   className="group-hover:opacity-100"
-                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-pink)' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)' }}
                   onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-quaternary)' }}
                 >
-                  <Trash2 size={13} />
+                  <MoreVertical size={14} />
                 </button>
               )}
             </motion.div>
@@ -611,6 +623,17 @@ export default function PlanList() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {contextMenu && (
+        <PlanContextMenu
+          planTitle={plans.find((p) => p.id === contextMenu.planId)?.title ?? ''}
+          onEdit={() => setActivePlan(contextMenu.planId)}
+          onDelete={() => handleSingleDelete(contextMenu.planId)}
+          onStartFocus={() => handleStartFocusFromPlan(contextMenu.planId)}
+          onClose={() => setContextMenu(null)}
+          anchorRect={contextMenu.rect}
+        />
+      )}
     </div>
   )
 }
