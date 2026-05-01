@@ -60,7 +60,7 @@ export default function TimerHistoryPanel() {
       </div>
 
       {activeTab === 'today' && (
-        <TodayView entries={todayEntries} todayCount={todayCount} todayMinutes={todayMinutes} resolvePlan={resolvePlan} formatTime={formatTime} />
+        <TodayView entries={todayEntries} resolvePlan={resolvePlan} formatTime={formatTime} />
       )}
       {activeTab === 'week' && (
         <WeekView entries={history} resolvePlan={resolvePlan} formatTime={formatTime} />
@@ -72,26 +72,14 @@ export default function TimerHistoryPanel() {
   )
 }
 
-function TodayView({ entries, todayCount, todayMinutes, resolvePlan, formatTime }: {
+function TodayView({ entries, resolvePlan, formatTime }: {
   entries: TimerHistoryEntry[]
-  todayCount: number
-  todayMinutes: number
   resolvePlan: (id?: string) => { title: string; color: string } | null
   formatTime: (iso: string) => string
 }) {
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-        <div style={{ background: 'rgba(100,210,255,0.10)', borderRadius: 'var(--radius-md)', padding: '8px 10px' }}>
-          <div style={{ color: '#64D2FF', font: 'var(--text-title-3)', fontWeight: 700, lineHeight: 1.2 }}>{todayCount}</div>
-          <div style={{ color: 'var(--text-tertiary)', font: 'var(--text-caption-2)', marginTop: 2 }}>完成轮数</div>
-        </div>
-        <div style={{ background: 'rgba(10,132,255,0.10)', borderRadius: 'var(--radius-md)', padding: '8px 10px' }}>
-          <div style={{ color: '#0A84FF', font: 'var(--text-title-3)', fontWeight: 700, lineHeight: 1.2 }}>{todayMinutes}</div>
-          <div style={{ color: 'var(--text-tertiary)', font: 'var(--text-caption-2)', marginTop: 2 }}>专注分钟</div>
-        </div>
-      </div>
-      <div style={{ position: 'relative', paddingLeft: 18, maxHeight: 200, overflowY: 'auto' }}>
+      <div style={{ position: 'relative', paddingLeft: 18, maxHeight: 130, overflowY: 'auto' }}>
         <div style={{ position: 'absolute', left: 5, top: 4, bottom: 4, width: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 1 }} />
         {entries.slice(0, 10).map((entry, i) => {
           const plan = resolvePlan(entry.planId)
@@ -150,7 +138,7 @@ function WeekView({ entries, resolvePlan, formatTime }: {
   }, [entries])
 
   return (
-    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} style={{ maxHeight: 260, overflowY: 'auto' }}>
+    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} style={{ maxHeight: 130, overflowY: 'auto' }}>
       {weekDays.filter((d) => d.count > 0).map((day) => (
         <div key={day.date} style={{ marginBottom: 4 }}>
           <button
