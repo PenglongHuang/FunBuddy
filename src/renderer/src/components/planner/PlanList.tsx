@@ -6,6 +6,7 @@ import { getTagsWithCounts } from '@/lib/tag-utils'
 import { useNoteStore } from '@/stores/noteStore'
 import { motion, AnimatePresence } from 'motion/react'
 import PlanCreateDialog from './PlanCreateDialog'
+import PlanEditDialog from './PlanEditDialog'
 import PlanContextMenu from './PlanContextMenu'
 import { usePetStore } from '@/stores/petStore'
 import { useTimerStore } from '@/stores/timerStore'
@@ -59,6 +60,8 @@ export default function PlanList() {
   const [activeFilterTag, setActiveFilterTag] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'single'; id: string } | { type: 'batch' } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ planId: string; rect: DOMRect } | null>(null)
+  const [editTarget, setEditTarget] = useState<string | null>(null)
+  const updatePlan = usePlanStore((s) => s.updatePlan)
   const setActivePanel = usePetStore((s) => s.setActivePanel)
   const setWindowMode = usePetStore((s) => s.setWindowMode)
 
@@ -166,7 +169,7 @@ export default function PlanList() {
   }
 
   return (
-    <div className="flex flex-col h-full" style={{ gap: 6 }}>
+    <div className="flex flex-col h-full" style={{ gap: 6, position: 'relative' }}>
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         {editMode ? (
@@ -316,7 +319,12 @@ export default function PlanList() {
       )}
 
       {/* Plan cards + empty state */}
-      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col" style={{ gap: 4 }}>
+      <div className="flex-1 min-h-0 overflow-y-auto" style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+        gap: 4,
+        alignContent: 'start',
+      }}>
         {filteredPlans.map((plan) => {
           const badge = TYPE_BADGE[plan.planType || 'daily']
           const isSelected = selectedIds.has(plan.id)
@@ -648,12 +656,29 @@ export default function PlanList() {
         <PlanContextMenu
           planTitle={plans.find((p) => p.id === contextMenu.planId)?.title ?? ''}
           onEdit={() => setActivePlan(contextMenu.planId)}
+          onEditType={() => setEditTarget(contextMenu.planId)}
           onDelete={() => handleSingleDelete(contextMenu.planId)}
           onStartFocus={() => handleStartFocusFromPlan(contextMenu.planId)}
           onClose={() => setContextMenu(null)}
           anchorRect={contextMenu.rect}
         />
       )}
+
+      {editTarget && (() => {
+        const targetPlan = plans.find((p) => p.id === editTarget)
+        if (!targetPlan) return null
+        return (
+          <PlanEditDialog
+            plan={targetPlan}
+            onConfirm={async (newType, newStart, newEnd) => {
+              await updatePlan(editTarget, { planType: newType, startDate: newStart, endDate: newEnd })
+              setEditTarget(null)
+              useToastStore.getState().show('计划已更新')
+            }}
+            onCancel={() => setEditTarget(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

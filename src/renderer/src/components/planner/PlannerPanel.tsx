@@ -38,7 +38,7 @@ export default function PlannerPanel() {
               gap: 5,
               padding: '5px 14px',
               borderRadius: 'var(--radius-full)',
-              fontSize: 12,
+              fontSize: 'clamp(12px, 2.5cqw, 15px)',
               fontWeight: 500,
               background: view === key ? 'var(--bg-base)' : 'transparent',
               color: view === key ? 'var(--text-primary)' : 'var(--text-tertiary)',
