@@ -1,13 +1,19 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useNoteStore } from '@/stores/noteStore'
 import MarkdownEditor from '@/components/common/MarkdownEditor'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
-import { ArrowLeft, Pencil, Eye } from 'lucide-react'
+import LiveMarkdownEditor from '@/components/common/LiveMarkdownEditor'
+import TableOfContents from '@/components/common/TableOfContents'
+import { ArrowLeft, Pencil, Eye, Zap, List } from 'lucide-react'
 import TagInput from '@/components/common/TagInput'
 import { getAllTags } from '@/lib/tag-utils'
 import { motion } from 'motion/react'
 import { useToast } from '@/components/common/Toast'
 import { extractH1Title } from '@/utils/markdown'
+import { usePetStore } from '@/stores/petStore'
+import { windowApi } from '@/lib/ipc'
+import { extractHeadings } from '@/lib/toc-extract'
 
 const AUTO_SAVE_DELAY = 3000
 
@@ -23,14 +29,24 @@ export default function NoteEditor() {
 
   const allTags = useMemo(() => getAllTags(notes), [notes])
 
+  const tocMaxLevel = useNoteStore((s) => s.tocMaxLevel)
+  const setTocVisibleGlobal = usePetStore((s) => s.setTocVisible)
+
   const [content, setContent] = useState('')
-  const [mode, setMode] = useState<'edit' | 'preview'>('edit')
+  const [mode, setMode] = useState<'live' | 'edit' | 'preview'>(
+    () => useNoteStore.getState().editorMode
+  )
+  const [tocVisible, setTocVisible] = useState(false)
+  const [currentLineIndex, setCurrentLineIndex] = useState<number | null>(0)
   const [dirty, setDirty] = useState(false)
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout>>(null)
   const contentRef = useRef(content)
   contentRef.current = content
   const dirtyRef = useRef(false)
   dirtyRef.current = dirty
+  const tocVisibleRef = useRef(tocVisible)
+  tocVisibleRef.current = tocVisible
+  const editorRef = useRef<HTMLDivElement>(null)
 
   const { showToast, ToastContainer } = useToast()
 
@@ -71,6 +87,10 @@ export default function NoteEditor() {
   // Cleanup: save dirty content on unmount
   useEffect(() => {
     return () => {
+      if (tocVisibleRef.current) {
+        usePetStore.getState().setTocVisible(false)
+        windowApi.resizeForSidePanel(-140)
+      }
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
       if (dirtyRef.current) {
         const store = useNoteStore.getState()
@@ -97,6 +117,39 @@ export default function NoteEditor() {
     autoSaveTimer.current = setTimeout(() => doSave(true), AUTO_SAVE_DELAY)
   }
 
+  const toggleToc = async () => {
+    const nextVisible = !tocVisible
+    setTocVisible(nextVisible)
+    setTocVisibleGlobal(nextVisible)
+    if (nextVisible) {
+      await windowApi.resizeForSidePanel(140)
+    } else {
+      await windowApi.resizeForSidePanel(-140)
+    }
+  }
+
+  const handleHeadingClick = (lineIndex: number) => {
+    setCurrentLineIndex(lineIndex)
+    if (!editorRef.current) return
+
+    if (mode === 'preview') {
+      const headingEls = editorRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6')
+      const headings = extractHeadings(content, tocMaxLevel)
+      const target = headings.find(h => h.lineIndex === lineIndex)
+      if (target) {
+        for (const el of headingEls) {
+          if (el.textContent?.trim() === target.text) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            break
+          }
+        }
+      }
+    } else {
+      const lineHeight = 20
+      editorRef.current.scrollTop = lineIndex * lineHeight
+    }
+  }
+
   return (
     <div className="flex flex-col h-full gap-3" style={{ position: 'relative' }}>
       <ToastContainer />
@@ -104,7 +157,14 @@ export default function NoteEditor() {
       {/* Toolbar */}
       <div className="flex items-center gap-3">
         <motion.button
-          onClick={() => setActiveNote(null)}
+          onClick={async () => {
+            if (tocVisible) {
+              setTocVisible(false)
+              setTocVisibleGlobal(false)
+              await windowApi.resizeForSidePanel(-140)
+            }
+            setActiveNote(null)
+          }}
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.92 }}
           style={{
@@ -125,24 +185,41 @@ export default function NoteEditor() {
           <span className="truncate" style={{ font: 'var(--text-headline)', color: 'var(--text-primary)', fontWeight: 600 }}>
             {note.title}
           </span>
-          {dirty && mode === 'edit' && (
+          {dirty && (
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent-orange)', flexShrink: 0 }} />
           )}
         </div>
 
-        {/* Edit / Preview toggle */}
-        <div
-          className="flex gap-0.5"
+        {/* TOC toggle */}
+        <motion.button
+          onClick={toggleToc}
+          whileTap={{ scale: 0.9 }}
           style={{
-            background: 'var(--bg-tertiary)',
-            borderRadius: 'var(--radius-sm)',
-            padding: 2,
+            width: 24, height: 24, borderRadius: 5,
+            background: tocVisible ? 'rgba(10,132,255,0.15)' : 'transparent',
+            border: tocVisible ? '0.5px solid rgba(10,132,255,0.30)' : 'none',
+            color: tocVisible ? 'var(--accent-blue)' : 'var(--text-quaternary)',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background 0.2s ease, color 0.2s ease',
           }}
         >
-          {([['edit', Pencil], ['preview', Eye]] as const).map(([m, Icon]) => (
+          <List size={12} />
+        </motion.button>
+
+        {/* Mode toggle */}
+        <div className="flex gap-0.5" style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: 2 }}>
+          {([
+            ['live', Zap],
+            ['edit', Pencil],
+            ['preview', Eye],
+          ] as const).map(([m, Icon]) => (
             <motion.button
               key={m}
-              onClick={() => setMode(m)}
+              onClick={() => {
+                setMode(m)
+                useNoteStore.getState().setEditorMode(m)
+              }}
               whileTap={{ scale: 0.9 }}
               style={{
                 width: 28, height: 24, borderRadius: 5,
@@ -168,13 +245,25 @@ export default function NoteEditor() {
       />
 
       {/* Editor / Preview */}
-      <div className="flex-1 min-h-0">
-        {mode === 'edit' ? (
-          <MarkdownEditor value={content} onChange={handleChange} placeholder="# 标题\n\n内容..." />
+      <div ref={editorRef} className="flex-1 min-h-0" style={{ overflow: 'auto' }}>
+        {mode === 'live' ? (
+          <LiveMarkdownEditor value={content} onChange={handleChange} onCursorLineChange={setCurrentLineIndex} />
+        ) : mode === 'edit' ? (
+          <MarkdownEditor value={content} onChange={handleChange} onCursorLineChange={setCurrentLineIndex} placeholder="# 标题\n\n内容..." />
         ) : (
           <MarkdownPreview content={content} />
         )}
       </div>
     </div>
+    {tocVisible && typeof document !== 'undefined' && document.getElementById('side-panel-slot') && createPortal(
+      <TableOfContents
+        content={content}
+        maxLevel={tocMaxLevel}
+        currentLineIndex={currentLineIndex}
+        onHeadingClick={handleHeadingClick}
+        onClose={toggleToc}
+      />,
+      document.getElementById('side-panel-slot')!
+    )}
   )
 }
