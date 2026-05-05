@@ -44,12 +44,34 @@ export const windowApi = {
     window.api.windowExpandPanel(petX, petY) as Promise<{ x: number; y: number }>,
   collapsePet: (petX?: number, petY?: number) =>
     window.api.windowCollapsePet(petX, petY),
-  minimize: (): Promise<void> =>
-    window.api.windowMinimize(),
+  hide: (): Promise<void> =>
+    window.api.windowHide(),
   maximize: (): Promise<void> =>
     window.api.windowMaximize(),
+  restoreDefault: (): Promise<void> =>
+    window.api.windowRestoreDefault(),
+  resizeForSidePanel: async (panelWidth: number) => {
+    const bounds = await windowApi.getWindowBounds()
+    if (!bounds) return
+    // Expand leftward: decrease x, increase width
+    const newBounds = {
+      x: bounds.x - panelWidth,
+      y: bounds.y,
+      width: bounds.width + panelWidth,
+      height: bounds.height,
+    }
+    // Clamp to screen: don't go past left edge
+    if (newBounds.x < 0) {
+      newBounds.x = 0
+    }
+    await windowApi.setBounds(newBounds)
+  },
+  titlebarDrag: (deltaX: number, deltaY: number): void =>
+    window.api.windowTitlebarDrag(deltaX, deltaY),
   invalidate: (): Promise<void> =>
     window.api.windowInvalidate(),
+  minimize: (): Promise<void> =>
+    window.api.windowMinimize(),
   startPetTracking: (): Promise<void> =>
     window.api.startPetTracking(),
   stopPetTracking: (): Promise<void> =>
@@ -95,4 +117,9 @@ export const quickNoteApi = {
 export const noteEvents = {
   onNavigateToNote: (callback: (noteId: string) => void) =>
     window.api.onNavigateToNote(callback),
+}
+
+export const windowModeEvents = {
+  onSetWindowMode: (callback: (mode: 'pet' | 'expanded') => void) =>
+    window.api.onSetWindowMode((mode) => callback(mode as 'pet' | 'expanded')),
 }
