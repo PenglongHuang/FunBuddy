@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { nanoid } from 'nanoid'
-import { fs } from '@/lib/ipc'
+import { fs, store } from '@/lib/ipc'
 import type { Plan, PlanType } from '@/types/plan'
 
 const COLOR_MAP: Record<PlanType, string> = {
@@ -43,9 +43,11 @@ interface PlanStore {
   plans: Plan[]
   loaded: boolean
   activePlanId: string | null
+  sortBy: 'time' | 'name' | 'planDate'
+  viewMode: 'list' | 'card' | 'compact'
   load: () => Promise<void>
   createPlan: (title: string, startDate: string, endDate: string | null, planType?: PlanType, content?: string) => Promise<Plan>
-  updatePlan: (id: string, updates: { title?: string; startDate?: string; endDate?: string | null }) => Promise<void>
+  updatePlan: (id: string, updates: { title?: string; startDate?: string; endDate?: string | null; planType?: PlanType }) => Promise<void>
   deletePlan: (id: string) => Promise<void>
   deletePlans: (ids: string[]) => Promise<void>
   savePlanContent: (id: string, content: string) => Promise<void>
@@ -55,6 +57,8 @@ interface PlanStore {
   updatePlanTags: (id: string, tags: string[]) => Promise<void>
   renameTag: (oldName: string, newName: string) => Promise<void>
   deleteTag: (tagName: string) => Promise<void>
+  setSortBy: (sort: 'time' | 'name' | 'planDate') => void
+  setViewMode: (mode: 'list' | 'card' | 'compact') => void
 }
 
 export const usePlanStore = create<PlanStore>()(
@@ -62,6 +66,8 @@ export const usePlanStore = create<PlanStore>()(
     plans: [],
     loaded: false,
     activePlanId: null,
+    sortBy: 'time',
+    viewMode: 'card',
 
     load: async () => {
       try {
@@ -78,6 +84,10 @@ export const usePlanStore = create<PlanStore>()(
         }
         if (validPlans.length !== plans.length) {
           await fs.writeFile('plans/index.json', JSON.stringify(validPlans, null, 2))
+        }
+        const prefs = await store.get<{ sortBy: string; viewMode: string }>('planPrefs')
+        if (prefs) {
+          set({ sortBy: (prefs.sortBy as any) ?? 'time', viewMode: (prefs.viewMode as any) ?? 'card' })
         }
         set({ plans: validPlans, loaded: true })
       } catch {
@@ -101,14 +111,32 @@ export const usePlanStore = create<PlanStore>()(
     },
 
     updatePlan: async (id, updates) => {
+      const plan = get().plans.find((p) => p.id === id)
+      if (!plan) return
+
+      const newType = updates.planType ?? plan.planType
+      const newStart = updates.startDate ?? plan.startDate
+      const newEnd = updates.endDate !== undefined ? updates.endDate : plan.endDate
+      const slug = plan.filePath.split('/').pop()!.replace(/^[^-]+-/, '').replace(/\.md$/, '')
+      const newFilePath = buildFilePath(plan.id, slug, newStart, newType, newEnd)
+
+      // Move file if path changed
+      if (newFilePath !== plan.filePath) {
+        const content = await fs.readFile(plan.filePath)
+        await fs.writeFile(newFilePath, content)
+        try { await fs.deleteFile(plan.filePath) } catch { /* ignore */ }
+      }
+
       set((s) => {
-        const plan = s.plans.find((p) => p.id === id)
-        if (!plan) return
-        if (updates.title !== undefined) plan.title = updates.title
-        if (updates.startDate !== undefined) plan.startDate = updates.startDate
-        if (updates.endDate !== undefined) plan.endDate = updates.endDate
-        plan.color = planColor(plan.startDate, plan.endDate, plan.planType)
-        plan.updatedAt = new Date().toISOString()
+        const p = s.plans.find((p) => p.id === id)
+        if (!p) return
+        if (updates.title !== undefined) p.title = updates.title
+        if (updates.startDate !== undefined) p.startDate = updates.startDate
+        if (updates.endDate !== undefined) p.endDate = updates.endDate
+        if (updates.planType !== undefined) p.planType = updates.planType
+        p.filePath = newFilePath
+        p.color = COLOR_MAP[newType]
+        p.updatedAt = new Date().toISOString()
       })
       await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
     },
@@ -191,6 +219,16 @@ export const usePlanStore = create<PlanStore>()(
         }
       })
       await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
+    },
+
+    setSortBy: (sort) => {
+      set({ sortBy: sort })
+      store.set('planPrefs', { sortBy: sort, viewMode: get().viewMode })
+    },
+
+    setViewMode: (mode) => {
+      set({ viewMode: mode })
+      store.set('planPrefs', { sortBy: get().sortBy, viewMode: mode })
     },
   })),
 )
