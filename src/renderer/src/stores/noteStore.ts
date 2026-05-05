@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { nanoid } from 'nanoid'
-import { fs } from '@/lib/ipc'
+import { fs, store } from '@/lib/ipc'
 import type { Note } from '@/types/note'
 
 
@@ -9,6 +9,8 @@ interface NoteStore {
   notes: Note[]
   loaded: boolean
   activeNoteId: string | null
+  sortBy: 'time' | 'name'
+  viewMode: 'list' | 'card' | 'compact'
   load: () => Promise<void>
   createNote: (title: string, content?: string, tags?: string[]) => Promise<Note>
   deleteNote: (id: string) => Promise<void>
@@ -20,6 +22,8 @@ interface NoteStore {
   renameTag: (oldName: string, newName: string) => Promise<void>
   deleteTag: (tagName: string) => Promise<void>
   setActiveNote: (id: string | null) => void
+  setSortBy: (sort: 'time' | 'name') => void
+  setViewMode: (mode: 'list' | 'card' | 'compact') => void
 }
 
 export const useNoteStore = create<NoteStore>()(
@@ -27,6 +31,8 @@ export const useNoteStore = create<NoteStore>()(
     notes: [],
     loaded: false,
     activeNoteId: null,
+    sortBy: 'time',
+    viewMode: 'card',
 
     load: async () => {
       try {
@@ -43,6 +49,11 @@ export const useNoteStore = create<NoteStore>()(
         set({ notes: validNotes, loaded: true })
       } catch {
         set({ notes: [], loaded: true })
+      }
+
+      const prefs = await store.get<{ sortBy: string; viewMode: string }>('notePrefs')
+      if (prefs) {
+        set({ sortBy: (prefs.sortBy as any) ?? 'time', viewMode: (prefs.viewMode as any) ?? 'card' })
       }
     },
 
@@ -148,5 +159,15 @@ export const useNoteStore = create<NoteStore>()(
     },
 
     setActiveNote: (id) => set({ activeNoteId: id }),
+
+    setSortBy: (sort) => {
+      set({ sortBy: sort })
+      store.set('notePrefs', { sortBy: sort, viewMode: get().viewMode })
+    },
+
+    setViewMode: (mode) => {
+      set({ viewMode: mode })
+      store.set('notePrefs', { sortBy: get().sortBy, viewMode: mode })
+    },
   }))
 )
