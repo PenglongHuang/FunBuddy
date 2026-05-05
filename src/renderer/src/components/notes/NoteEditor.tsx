@@ -165,6 +165,7 @@ export default function NoteEditor() {
   }
 
   return (
+    <>
     <div className="flex flex-col h-full gap-3" style={{ position: 'relative' }}>
       <ToastContainer />
 
@@ -279,5 +280,6 @@ export default function NoteEditor() {
       />,
       document.getElementById('side-panel-slot')!
     )}
+    </>
   )
 }
