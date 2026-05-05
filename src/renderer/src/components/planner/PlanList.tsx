@@ -1,8 +1,11 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { usePlanStore } from '@/stores/planStore'
-import { Plus, Trash2, CheckSquare, Square, Calendar, CalendarDays, CalendarRange, Play, Timer, FileText } from 'lucide-react'
+import { Plus, Trash2, CheckSquare, Square, Calendar, CalendarDays, CalendarRange, Play, Timer, FileText, LayoutGrid, Grid3X3, Clock, ArrowDownAZ } from 'lucide-react'
 import TagFilterBar from '@/components/common/TagFilterBar'
-import ListToolbar, { type ViewMode } from '@/components/common/ListToolbar'
+import SortDropdown from '@/components/common/ListToolbar'
+import PlanTypeFilter from '@/components/common/PlanTypeFilter'
+
+type ViewMode = 'card' | 'compact'
 import { formatFocusTime } from '@/lib/format-time'
 import { getTagsWithCounts } from '@/lib/tag-utils'
 import { useNoteStore } from '@/stores/noteStore'
@@ -66,6 +69,7 @@ export default function PlanList() {
   const [editMode, setEditMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [activeFilterTag, setActiveFilterTag] = useState<string | null>(null)
+  const [planTypeFilter, setPlanTypeFilter] = useState<'all' | 'daily' | 'weekly' | 'monthly'>('all')
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'single'; id: string } | { type: 'batch' } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ planId: string; rect: DOMRect } | null>(null)
   const [editTarget, setEditTarget] = useState<string | null>(null)
@@ -74,9 +78,15 @@ export default function PlanList() {
   const setWindowMode = usePetStore((s) => s.setWindowMode)
 
   const filteredPlans = useMemo(() => {
-    if (activeFilterTag === null) return plans
-    return plans.filter((p) => (p.tags ?? []).includes(activeFilterTag))
-  }, [plans, activeFilterTag])
+    let result = plans
+    if (planTypeFilter !== 'all') {
+      result = result.filter((p) => p.planType === planTypeFilter)
+    }
+    if (activeFilterTag !== null) {
+      result = result.filter((p) => (p.tags ?? []).includes(activeFilterTag))
+    }
+    return result
+  }, [plans, planTypeFilter, activeFilterTag])
 
   const sortedPlans = useMemo(() => {
     const sorted = [...filteredPlans]
@@ -109,6 +119,13 @@ export default function PlanList() {
       if (remaining.length === 0) setActiveFilterTag(null)
     }
   }, [filteredPlans, activeFilterTag])
+
+  useEffect(() => {
+    if (planTypeFilter !== 'all') {
+      const remaining = plans.filter((p) => p.planType === planTypeFilter)
+      if (remaining.length === 0) setPlanTypeFilter('all')
+    }
+  }, [plans, planTypeFilter])
 
   const visibleIds = useMemo(() => new Set(sortedPlans.map((p) => p.id)), [sortedPlans])
   const allSelected = sortedPlans.length > 0 && sortedPlans.every((p) => selectedIds.has(p.id))
@@ -182,9 +199,7 @@ export default function PlanList() {
 
   const gridStyle = viewMode === 'compact'
     ? { gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, alignContent: 'start' as const }
-    : viewMode === 'card'
-      ? { gridTemplateColumns: '1fr', gap: 8, alignContent: 'start' as const }
-      : { gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 4, alignContent: 'start' as const }
+    : { gridTemplateColumns: '1fr', gap: 8, alignContent: 'start' as const }
 
   return (
     <div className="flex flex-col h-full" style={{ gap: 6, position: 'relative' }}>
@@ -235,30 +250,85 @@ export default function PlanList() {
         )}
       </div>
 
-      {/* Toolbar: sort + view mode */}
-      <ListToolbar
-        sortOptions={[
-          { value: 'time', label: '时间' },
-          { value: 'name', label: '名称' },
-          { value: 'planDate', label: '计划日期' },
-        ]}
-        currentSort={sortBy}
-        onSortChange={(v) => setSortBy(v as 'time' | 'name' | 'planDate')}
-        currentView={viewMode}
-        onViewChange={setViewMode}
-      />
-
-      {/* Tag filter */}
-      {tagFilterItems.length > 0 && (
-        <TagFilterBar
-          tags={tagFilterItems}
-          activeTag={activeFilterTag}
-          totalItems={filteredPlans.length}
-          onSelect={setActiveFilterTag}
-          onRenameTag={handleRenameTag}
-          onDeleteTag={handleDeleteTag}
-        />
+      {/* Plan type filter */}
+      {plans.length > 0 && !editMode && (
+        <PlanTypeFilter value={planTypeFilter} onChange={setPlanTypeFilter} />
       )}
+
+      {/* Merged row: tag filter + sort + view toggle */}
+      {tagFilterItems.length > 0 ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <TagFilterBar
+              tags={tagFilterItems}
+              activeTag={activeFilterTag}
+              totalItems={filteredPlans.length}
+              onSelect={setActiveFilterTag}
+              onRenameTag={handleRenameTag}
+              onDeleteTag={handleDeleteTag}
+            />
+          </div>
+          {!editMode && (
+            <>
+              <SortDropdown
+                sortOptions={[
+                  { value: 'time', label: '时间', icon: <Clock size={12} /> },
+                  { value: 'name', label: '名称', icon: <ArrowDownAZ size={12} /> },
+                  { value: 'planDate', label: '计划日期', icon: <Calendar size={12} /> },
+                ]}
+                currentSort={sortBy}
+                onSortChange={(v) => setSortBy(v as 'time' | 'name' | 'planDate')}
+              />
+              <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.06)' }} />
+              <div style={{ display: 'flex', gap: 2 }}>
+                <button onClick={() => setViewMode('card')} style={{
+                  padding: '3px 5px', borderRadius: 4, border: 'none', cursor: 'pointer',
+                  background: viewMode === 'card' ? 'var(--accent-blue)' : 'transparent',
+                  color: viewMode === 'card' ? '#fff' : 'var(--text-quaternary)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'background 0.15s ease, color 0.15s ease',
+                }}><LayoutGrid size={11} /></button>
+                <button onClick={() => setViewMode('compact')} style={{
+                  padding: '3px 5px', borderRadius: 4, border: 'none', cursor: 'pointer',
+                  background: viewMode === 'compact' ? 'var(--accent-blue)' : 'transparent',
+                  color: viewMode === 'compact' ? '#fff' : 'var(--text-quaternary)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'background 0.15s ease, color 0.15s ease',
+                }}><Grid3X3 size={11} /></button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : !editMode && plans.length > 0 ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
+          <SortDropdown
+            sortOptions={[
+              { value: 'time', label: '时间', icon: <Clock size={12} /> },
+              { value: 'name', label: '名称', icon: <ArrowDownAZ size={12} /> },
+              { value: 'planDate', label: '计划日期', icon: <Calendar size={12} /> },
+            ]}
+            currentSort={sortBy}
+            onSortChange={(v) => setSortBy(v as 'time' | 'name' | 'planDate')}
+          />
+          <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.06)' }} />
+          <div style={{ display: 'flex', gap: 2 }}>
+            <button onClick={() => setViewMode('card')} style={{
+              padding: '3px 5px', borderRadius: 4, border: 'none', cursor: 'pointer',
+              background: viewMode === 'card' ? 'var(--accent-blue)' : 'transparent',
+              color: viewMode === 'card' ? '#fff' : 'var(--text-quaternary)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'background 0.15s ease, color 0.15s ease',
+            }}><LayoutGrid size={11} /></button>
+            <button onClick={() => setViewMode('compact')} style={{
+              padding: '3px 5px', borderRadius: 4, border: 'none', cursor: 'pointer',
+              background: viewMode === 'compact' ? 'var(--accent-blue)' : 'transparent',
+              color: viewMode === 'compact' ? '#fff' : 'var(--text-quaternary)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'background 0.15s ease, color 0.15s ease',
+            }}><Grid3X3 size={11} /></button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Plan cards + empty state */}
       <div className="flex-1 min-h-0 overflow-y-auto" style={{ display: 'grid', ...gridStyle }}>
@@ -266,136 +336,6 @@ export default function PlanList() {
           const focusMin = getPlanFocusMinutes(plan.id)
           const isSelected = selectedIds.has(plan.id)
           const isActive = !editMode && activePlanId === plan.id
-
-          // --- List view ---
-          if (viewMode === 'list') {
-            return (
-              <motion.div
-                key={plan.id}
-                onClick={() => {
-                  if (editMode) toggleSelect(plan.id)
-                  else setActivePlan(plan.id)
-                }}
-                whileTap={{ scale: 0.98 }}
-                className="group"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '10px 12px',
-                  borderRadius: 'var(--radius-md)',
-                  background: isActive
-                    ? 'rgba(255,255,255,0.06)'
-                    : isSelected
-                      ? 'rgba(10,132,255,0.06)'
-                      : 'var(--bg-secondary)',
-                  border: isActive
-                    ? '0.5px solid rgba(255,255,255,0.10)'
-                    : isSelected
-                      ? '0.5px solid rgba(10,132,255,0.20)'
-                      : '0.5px solid rgba(255,255,255,0.04)',
-                  cursor: 'pointer',
-                  transition: 'background 0.2s ease, border-color 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  if (!editMode && !isActive) {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!editMode && !isActive) {
-                    e.currentTarget.style.background = 'var(--bg-secondary)'
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)'
-                  }
-                }}
-              >
-                {/* Left: checkbox or icon */}
-                {editMode ? (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); toggleSelect(plan.id) }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: 0,
-                      color: isSelected ? 'var(--accent-blue)' : 'var(--text-quaternary)',
-                      flexShrink: 0,
-                      transition: 'color 0.15s ease',
-                    }}
-                  >
-                    {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
-                  </button>
-                ) : (
-                  <div style={{ flexShrink: 0, color: plan.color, display: 'flex' }}>
-                    {planIcon(plan)}
-                  </div>
-                )}
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="truncate"
-                      style={{
-                        font: 'var(--text-caption-1)',
-                        fontWeight: 500,
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      {plan.title}
-                    </span>
-                    <span style={{ fontSize: 9, color: 'var(--text-tertiary)', flexShrink: 0 }}>
-                      {formatDateRange(plan)}
-                    </span>
-                    <span style={{ fontSize: 9, color: focusMin > 0 ? 'var(--accent-teal)' : 'var(--text-quaternary)', flexShrink: 0 }}>
-                      ⏱ {formatFocusTime(focusMin)}
-                    </span>
-                  </div>
-                  {(plan.tags ?? []).length > 0 && (
-                    <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap' as const }}>
-                      {(plan.tags ?? []).slice(0, 3).map((tag) => (
-                        <TagBadge key={tag} tag={tag} />
-                      ))}
-                      {(plan.tags ?? []).length > 3 && (
-                        <span style={{ fontSize: 10, color: 'var(--text-quaternary)' }}>
-                          +{(plan.tags ?? []).length - 3}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Actions - visible on hover */}
-                {!editMode && (
-                  <div className="flex items-center opacity-0 group-hover:opacity-100" style={{ transition: 'opacity 0.15s ease' }}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleStartFocusFromPlan(plan.id)
-                      }}
-                      style={{
-                        background: 'transparent', border: 'none',
-                        color: '#0A84FF', cursor: 'pointer', padding: 4,
-                        borderRadius: 'var(--radius-sm)',
-                        transition: 'transform 0.15s ease',
-                        flexShrink: 0,
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.15)' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
-                    >
-                      <Play size={14} fill="currentColor" />
-                    </button>
-                    <MoreButton onClick={(e) => {
-                      e.stopPropagation()
-                      const rect = e.currentTarget.getBoundingClientRect()
-                      setContextMenu({ planId: plan.id, rect })
-                    }} />
-                  </div>
-                )}
-              </motion.div>
-            )
-          }
 
           // --- Card view ---
           if (viewMode === 'card') {
@@ -553,7 +493,7 @@ export default function PlanList() {
               <span style={{ fontSize: 10, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {plan.title}
               </span>
-              <span style={{ fontSize: 8, color: 'var(--text-quaternary)', marginTop: 2, display: 'block' }}>
+              <span style={{ fontSize: 10, color: 'var(--text-quaternary)', marginTop: 2, display: 'block' }}>
                 {formatDateRange(plan)}
               </span>
             </motion.div>
