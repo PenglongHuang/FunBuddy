@@ -14,6 +14,8 @@ interface PetStore {
   setPetPosition: (pos: { x: number; y: number } | null) => void
   petHovered: boolean
   setPetHovered: (v: boolean) => void
+  tocVisible: boolean
+  setTocVisible: (v: boolean) => void
 }
 
 export const usePetStore = create<PetStore>((set) => ({
@@ -29,4 +31,6 @@ export const usePetStore = create<PetStore>((set) => ({
   setPetPosition: (pos) => set({ petPosition: pos }),
   petHovered: false,
   setPetHovered: (v) => set({ petHovered: v }),
+  tocVisible: false,
+  setTocVisible: (v) => set({ tocVisible: v }),
 }))
