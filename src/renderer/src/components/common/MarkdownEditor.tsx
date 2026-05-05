@@ -2,16 +2,16 @@ interface MarkdownEditorProps {
   value: string
   onChange: (value: string) => void
   placeholder?: string
+  onCursorLineChange?: (lineIndex: number | null) => void
 }
 
-export default function MarkdownEditor({ value, onChange, placeholder }: MarkdownEditorProps) {
+export default function MarkdownEditor({ value, onChange, placeholder, onCursorLineChange }: MarkdownEditorProps) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== 'Tab') return
     e.preventDefault()
 
     const ta = e.currentTarget
     const start = ta.selectionStart
-    const end = ta.selectionEnd
 
     if (e.shiftKey) {
       // Shift+Tab: remove up to 2 leading spaces from current line
@@ -19,13 +19,13 @@ export default function MarkdownEditor({ value, onChange, placeholder }: Markdow
       const leading = value.slice(lineStart, start)
       const spacesToRemove = Math.min(2, leading.length - leading.trimStart().length)
       if (spacesToRemove > 0) {
-        onChange(value.slice(0, lineStart) + value.slice(lineStart + spacesToRemove))
-        requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start - spacesToRemove })
+        ta.selectionStart = lineStart
+        ta.selectionEnd = lineStart + spacesToRemove
+        document.execCommand('delete', false)
       }
     } else {
-      // Tab: insert 2 spaces at cursor
-      onChange(value.slice(0, start) + '  ' + value.slice(end))
-      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 2 })
+      // Tab: insert 2 spaces (execCommand keeps it on the undo stack)
+      document.execCommand('insertText', false, '  ')
     }
   }
 
@@ -35,6 +35,14 @@ export default function MarkdownEditor({ value, onChange, placeholder }: Markdow
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={handleKeyDown}
+      onSelect={() => {
+        if (onCursorLineChange) {
+          const textarea = document.activeElement as HTMLTextAreaElement
+          const textBeforeCursor = textarea.value.substring(0, textarea.selectionStart)
+          const lineIndex = textBeforeCursor.split('\n').length - 1
+          onCursorLineChange(lineIndex)
+        }
+      }}
       placeholder={placeholder}
       spellCheck={false}
     />
