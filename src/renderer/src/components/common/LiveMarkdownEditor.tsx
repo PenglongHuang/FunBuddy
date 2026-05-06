@@ -1,7 +1,7 @@
-// src/renderer/src/components/common/LiveMarkdownEditor.tsx
-import { useState, useRef, useCallback, useMemo } from 'react'
-import { marked } from 'marked'
-import { parseBlocks, replaceBlockInSource, type Block } from '@/lib/block-parser'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { extractHeadings } from '@/lib/toc-extract'
+import 'vditor/dist/index.css'
+import '@/styles/vditor-theme.css'
 
 interface LiveMarkdownEditorProps {
   value: string
@@ -11,126 +11,135 @@ interface LiveMarkdownEditorProps {
 }
 
 export default function LiveMarkdownEditor({ value, onChange, onCursorLineChange, placeholder }: LiveMarkdownEditorProps) {
-  const [activeBlockIndex, setActiveBlockIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const textareaRefs = useRef<Map<number, HTMLTextAreaElement>>(new Map())
+  const vditorRef = useRef<any>(null)
+  const initialValueRef = useRef(value)
+  const lastSyncedRef = useRef(value)
+  const [fallback, setFallback] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+  const onCursorLineChangeRef = useRef(onCursorLineChange)
+  onCursorLineChangeRef.current = onCursorLineChange
 
-  const blocks = useMemo(() => parseBlocks(value), [value])
-
-  const handleBlockFocus = useCallback((index: number) => {
-    setActiveBlockIndex(index)
-    if (onCursorLineChange) {
-      onCursorLineChange(blocks[index]?.startLine ?? null)
+  const handleCursorTracking = useCallback(() => {
+    if (!onCursorLineChangeRef.current || !vditorRef.current) return
+    const sel = window.getSelection()
+    if (!sel || !sel.rangeCount) return
+    let node = sel.anchorNode as HTMLElement | null
+    if (!node) return
+    while (node && node !== containerRef.current) {
+      if (node.nodeType === 1) {
+        const el = node as HTMLElement
+        const tag = el.tagName
+        if (['H1','H2','H3','H4','H5','H6'].includes(tag)) {
+          const text = el.textContent?.trim() ?? ''
+          const md = vditorRef.current.getValue()
+          const headings = extractHeadings(md)
+          const match = headings.find(h => h.text === text)
+          if (match) {
+            onCursorLineChangeRef.current(match.lineIndex)
+            return
+          }
+        }
+      }
+      node = node.parentElement
     }
-  }, [blocks, onCursorLineChange])
-
-  const handleBlockBlur = useCallback(() => {
-    setActiveBlockIndex(null)
+    onCursorLineChangeRef.current(null)
   }, [])
 
-  const handleBlockChange = useCallback((index: number, newContent: string) => {
-    const block = blocks[index]
-    if (!block) return
-    const newSource = replaceBlockInSource(value, block, newContent)
-    onChange(newSource)
-  }, [blocks, value, onChange])
+  useEffect(() => {
+    if (!containerRef.current) return
 
-  const autoResize = useCallback((el: HTMLTextAreaElement | null) => {
+    let destroyed = false
+
+    const initVditor = async () => {
+      try {
+        const Vditor = (await import('vditor')).default
+        if (destroyed || !containerRef.current) return
+
+        const vditor = new Vditor(containerRef.current, {
+          mode: 'ir',
+          toolbar: false,
+          counter: { enable: true },
+          outline: { enable: false },
+          placeholder: placeholder ?? '# 标题\n\n内容...',
+          theme: 'dark',
+          icon: 'ant',
+          value: initialValueRef.current,
+          input: (val) => {
+            lastSyncedRef.current = val
+            onChangeRef.current(val)
+          },
+          after: () => {
+            if (destroyed) return
+            setLoading(false)
+            lastSyncedRef.current = initialValueRef.current
+          },
+        })
+        vditorRef.current = vditor
+      } catch (err) {
+        console.error('Vditor init failed, falling back to textarea:', err)
+        setFallback(true)
+        setLoading(false)
+      }
+    }
+
+    initVditor()
+
+    return () => {
+      destroyed = true
+      if (vditorRef.current) {
+        try { vditorRef.current.destroy() } catch {}
+        vditorRef.current = null
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!vditorRef.current) return
+    if (value !== lastSyncedRef.current) {
+      lastSyncedRef.current = value
+      vditorRef.current.setValue(value)
+    }
+  }, [value])
+
+  useEffect(() => {
+    const el = containerRef.current
     if (!el) return
-    el.style.height = 'auto'
-    el.style.height = el.scrollHeight + 'px'
-  }, [])
-
-  const renderBlock = (block: Block, index: number) => {
-    const isActive = activeBlockIndex === index
-
-    if (isActive) {
-      return (
-        <textarea
-          key={`edit-${index}`}
-          data-start-line={block.startLine}
-          ref={(el) => { if (el) { textareaRefs.current.set(index, el); autoResize(el) } }}
-          value={block.content}
-          onChange={(e) => { handleBlockChange(index, e.target.value); autoResize(e.target) }}
-          onFocus={() => handleBlockFocus(index)}
-          onBlur={handleBlockBlur}
-          autoFocus
-          style={{
-            width: '100%',
-            minHeight: 24,
-            background: 'rgba(255,255,255,0.03)',
-            border: '0.5px solid rgba(10,132,255,0.20)',
-            borderRadius: 4,
-            padding: '6px 8px',
-            color: 'var(--text-primary)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-            lineHeight: 1.5,
-            resize: 'none',
-            outline: 'none',
-            display: 'block',
-            boxSizing: 'border-box',
-          }}
-        />
-      )
+    const handler = () => handleCursorTracking()
+    el.addEventListener('keyup', handler)
+    el.addEventListener('click', handler)
+    return () => {
+      el.removeEventListener('keyup', handler)
+      el.removeEventListener('click', handler)
     }
+  }, [handleCursorTracking])
 
-    if (block.content.trim() === '' && block.type === 'paragraph') {
-      return (
-        <div
-          key={`render-${index}`}
-          data-start-line={block.startLine}
-          onClick={() => handleBlockFocus(index)}
-          style={{ minHeight: 24, cursor: 'text', borderRadius: 4, padding: '6px 8px', color: 'var(--text-quaternary)', fontSize: 12 }}
-        >
-          {placeholder ?? ''}
-        </div>
-      )
-    }
-
-    const html = block.type === 'hr'
-      ? '<hr/>'
-      : (marked.parse(block.content, { async: false }) as string)
-
+  if (fallback) {
     return (
-      <div
-        key={`render-${index}`}
-        data-start-line={block.startLine}
-        onClick={() => handleBlockFocus(index)}
-        style={{
-          cursor: 'text',
-          borderRadius: 4,
-          padding: '6px 8px',
-          fontSize: 13,
-          lineHeight: 1.5,
-          color: 'var(--text-primary)',
-          transition: 'background 0.15s ease',
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-        dangerouslySetInnerHTML={{ __html: html }}
+      <textarea
+        className="w-full h-full bg-transparent text-xs text-white/80 font-mono resize-none outline-none placeholder:text-white/20"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        spellCheck={false}
       />
     )
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="flex-1 min-h-0"
-      style={{ padding: '8px 0' }}
-    >
-      {blocks.length === 0 ? (
-        <div
-          onClick={() => {
-            onChange('# 标题\n\n')
-            setTimeout(() => setActiveBlockIndex(0), 0)
-          }}
-          style={{ padding: '8px', color: 'var(--text-quaternary)', fontSize: 12, cursor: 'text' }}
-        >
-          {placeholder ?? '# 标题\n\n'}
+    <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      {loading && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'var(--text-quaternary)', fontSize: 12,
+          background: 'rgba(28,28,30,0.5)',
+        }}>
+          加载编辑器...
         </div>
-      ) : (
-        blocks.map((block, index) => renderBlock(block, index))
       )}
     </div>
   )
