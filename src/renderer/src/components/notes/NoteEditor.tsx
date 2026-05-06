@@ -11,7 +11,6 @@ import { motion } from 'motion/react'
 import { useToast } from '@/components/common/Toast'
 import { extractH1Title } from '@/utils/markdown'
 import { usePetStore } from '@/stores/petStore'
-import { windowApi } from '@/lib/ipc'
 import { extractHeadings } from '@/lib/toc-extract'
 
 const AUTO_SAVE_DELAY = 3000

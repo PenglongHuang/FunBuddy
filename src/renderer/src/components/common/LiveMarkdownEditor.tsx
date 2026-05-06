@@ -60,9 +60,9 @@ export default function LiveMarkdownEditor({ value, onChange, onCursorLineChange
 
         const vditor = new Vditor(containerRef.current, {
           mode: 'ir',
-          toolbar: false,
+          toolbar: [],
           counter: { enable: true },
-          outline: { enable: false },
+          outline: { enable: false, position: 'left' },
           placeholder: placeholder ?? '# 标题\n\n内容...',
           theme: 'dark',
           icon: 'ant',
