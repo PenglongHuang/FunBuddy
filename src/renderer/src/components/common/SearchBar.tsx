@@ -70,17 +70,22 @@ export default function SearchBar({ placeholder, value, onChange }: SearchBarPro
 
 export function highlightText(text: string, query: string): React.ReactNode {
   if (!query.trim()) return text
-  const lower = text.toLowerCase()
   const q = query.toLowerCase()
-  const idx = lower.indexOf(q)
-  if (idx === -1) return text
-  return (
-    <>
-      {text.slice(0, idx)}
-      <span style={{ color: '#64D2FF', background: 'rgba(10,132,255,0.15)', padding: '0 2px', borderRadius: 2 }}>
-        {text.slice(idx, idx + query.length)}
+  const lower = text.toLowerCase()
+  const parts: React.ReactNode[] = []
+  let lastIdx = 0
+  let idx = lower.indexOf(q, lastIdx)
+  let key = 0
+  while (idx !== -1) {
+    if (idx > lastIdx) parts.push(text.slice(lastIdx, idx))
+    parts.push(
+      <span key={key++} style={{ color: '#64D2FF', background: 'rgba(10,132,255,0.15)', padding: '0 2px', borderRadius: 2 }}>
+        {text.slice(idx, idx + q.length)}
       </span>
-      {text.slice(idx + query.length)}
-    </>
-  )
+    )
+    lastIdx = idx + q.length
+    idx = lower.indexOf(q, lastIdx)
+  }
+  if (lastIdx < text.length) parts.push(text.slice(lastIdx))
+  return parts.length > 0 ? <>{parts}</> : text
 }
