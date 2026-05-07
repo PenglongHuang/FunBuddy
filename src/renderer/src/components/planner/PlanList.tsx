@@ -1,70 +1,39 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { usePlanStore } from '@/stores/planStore'
-import { Plus, Trash2, CheckSquare, Square, Calendar, CalendarDays, CalendarRange, Play, Timer, FileText, LayoutGrid, Grid3X3, Clock, ArrowDownAZ } from 'lucide-react'
-import TagFilterBar from '@/components/common/TagFilterBar'
-import SortDropdown from '@/components/common/ListToolbar'
-import PlanTypeFilter, { type PlanTypeFilterValue } from '@/components/common/PlanTypeFilter'
-
-type ViewMode = 'card' | 'compact'
-import { formatFocusTime } from '@/lib/format-time'
-import { getTagsWithCounts } from '@/lib/tag-utils'
-import { useNoteStore } from '@/stores/noteStore'
+import { Plus, CheckSquare, Square, Calendar, Trash2, Timer, FileText, CalendarRange } from 'lucide-react'
+import type { PlanTypeFilterValue } from '@/components/common/PlanTypeFilter'
+import SearchBar from '@/components/common/SearchBar'
+import PlanToolbar from '@/components/planner/PlanToolbar'
+import PlanCard from '@/components/planner/PlanCard'
 import { motion, AnimatePresence } from 'motion/react'
 import PlanCreateDialog from './PlanCreateDialog'
 import PlanEditDialog from './PlanEditDialog'
-import { Button, ContextMenu, ConfirmDialog, TagBadge, MoreButton } from '@/components/ui'
+import { Button, ContextMenu, ConfirmDialog } from '@/components/ui'
 import { usePetStore } from '@/stores/petStore'
 import { useTimerStore } from '@/stores/timerStore'
 import { useToastStore } from '@/stores/toastStore'
-import type { PlanType, Plan } from '@/types/plan'
+import type { PlanType } from '@/types/plan'
 
-function planIcon(plan: Plan) {
-  const size = 14
-  const color = plan.color
-  switch (plan.planType) {
-    case 'weekly':
-      return <CalendarRange size={size} color={color} />
-    case 'monthly':
-      return <CalendarDays size={size} color={color} />
-    default:
-      return <Calendar size={size} color={color} />
-  }
+interface PlanListProps {
+  onSwitchToCalendar: () => void
 }
 
-function formatShortDate(iso: string): string {
-  const d = new Date(iso)
-  return `${d.getMonth() + 1}/${d.getDate()}`
-}
-
-function formatDateRange(plan: Plan): string {
-  const s = formatShortDate(plan.startDate)
-  const e = plan.endDate ? formatShortDate(plan.endDate) : null
-  return e && e !== s ? `${s} - ${e}` : s
-}
-
-function formatDateRangeFull(plan: Plan): string {
-  const s = new Date(plan.startDate).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
-  if (!plan.endDate) return s
-  const e = new Date(plan.endDate).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
-  return e !== s ? `${s} - ${e}` : s
-}
-
-export default function PlanList() {
+export default function PlanList({ onSwitchToCalendar }: PlanListProps) {
   const plans = usePlanStore((s) => s.plans)
   const createPlan = usePlanStore((s) => s.createPlan)
   const deletePlan = usePlanStore((s) => s.deletePlan)
   const deletePlans = usePlanStore((s) => s.deletePlans)
   const setActivePlan = usePlanStore((s) => s.setActivePlan)
   const activePlanId = usePlanStore((s) => s.activePlanId)
-  const renamePlanTag = usePlanStore((s) => s.renameTag)
-  const deletePlanTag = usePlanStore((s) => s.deleteTag)
   const sortBy = usePlanStore((s) => s.sortBy)
   const viewMode = usePlanStore((s) => s.viewMode)
   const setSortBy = usePlanStore((s) => s.setSortBy)
   const setViewMode = usePlanStore((s) => s.setViewMode)
-  const getPlanFocusMinutes = useTimerStore((s) => s.getPlanFocusMinutes)
-  const renameNoteTag = useNoteStore((s) => s.renameTag)
-  const deleteNoteTag = useNoteStore((s) => s.deleteTag)
+  const updatePlan = usePlanStore((s) => s.updatePlan)
+  const setActivePanel = usePetStore((s) => s.setActivePanel)
+  const setWindowMode = usePetStore((s) => s.setWindowMode)
+
+  const [searchQuery, setSearchQuery] = useState('')
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -73,9 +42,6 @@ export default function PlanList() {
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'single'; id: string } | { type: 'batch' } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ planId: string; rect: DOMRect } | null>(null)
   const [editTarget, setEditTarget] = useState<string | null>(null)
-  const updatePlan = usePlanStore((s) => s.updatePlan)
-  const setActivePanel = usePetStore((s) => s.setActivePanel)
-  const setWindowMode = usePetStore((s) => s.setWindowMode)
 
   const filteredPlans = useMemo(() => {
     let result = plans
@@ -85,8 +51,15 @@ export default function PlanList() {
     if (activeFilterTag !== null) {
       result = result.filter((p) => (p.tags ?? []).includes(activeFilterTag))
     }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter((p) =>
+        p.title.toLowerCase().includes(q) ||
+        (p.tags ?? []).some((t) => t.toLowerCase().includes(q))
+      )
+    }
     return result
-  }, [plans, planTypeFilter, activeFilterTag])
+  }, [plans, planTypeFilter, activeFilterTag, searchQuery])
 
   const sortedPlans = useMemo(() => {
     const sorted = [...filteredPlans]
@@ -97,21 +70,11 @@ export default function PlanList() {
       case 'planDate':
         sorted.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
         break
-      default: // 'time'
+      default:
         sorted.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
     }
     return sorted
   }, [filteredPlans, sortBy])
-
-  const tagFilterItems = useMemo(() => getTagsWithCounts(filteredPlans), [filteredPlans])
-
-  const handleRenameTag = useCallback(async (oldName: string, newName: string) => {
-    await Promise.all([renamePlanTag(oldName, newName), renameNoteTag(oldName, newName)])
-  }, [renamePlanTag, renameNoteTag])
-
-  const handleDeleteTag = useCallback(async (tagName: string) => {
-    await Promise.all([deletePlanTag(tagName), deleteNoteTag(tagName)])
-  }, [deletePlanTag, deleteNoteTag])
 
   useEffect(() => {
     if (activeFilterTag !== null) {
@@ -197,14 +160,10 @@ export default function PlanList() {
     setDeleteTarget(null)
   }
 
-  const gridStyle = viewMode === 'compact'
-    ? { gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, alignContent: 'start' as const }
-    : { gridTemplateColumns: '1fr', gap: 8, alignContent: 'start' as const }
-
   return (
-    <div className="flex flex-col h-full" style={{ gap: 6, position: 'relative' }}>
-      {/* Header */}
-      <div className="flex items-center justify-between shrink-0" style={{ overflow: 'hidden' }}>
+    <div className="flex flex-col h-full" style={{ gap: 0, position: 'relative' }}>
+      {/* TitleBar */}
+      <div className="flex items-center justify-between shrink-0" style={{ padding: '6px 12px' }}>
         {editMode ? (
           <>
             <button
@@ -230,298 +189,79 @@ export default function PlanList() {
           </>
         ) : (
           <>
-            <span style={{ font: 'var(--text-caption-1)', color: 'var(--text-tertiary)' }}>
-              {sortedPlans.length} 个计划
+            <span style={{ fontSize: 12, color: '#8e8e93' }}>
+              {searchQuery ? `搜索 "${searchQuery}" · ${sortedPlans.length} 个结果` : `${sortedPlans.length} 个计划`}
             </span>
             <div className="flex items-center gap-1">
-              {plans.length > 0 && (
-                <Button variant="ghost" onClick={() => setEditMode(true)}>管理</Button>
-              )}
-              <Button
-                variant="primary"
-                icon={<Plus size={13} strokeWidth={2.5} />}
-                onClick={() => setShowCreateDialog(true)}
-              >
-                新建
-              </Button>
+              {plans.length > 0 && <Button variant="ghost" onClick={() => setEditMode(true)}>管理</Button>}
+              <Button variant="primary" icon={<Plus size={13} strokeWidth={2.5} />} onClick={() => setShowCreateDialog(true)}>新建</Button>
             </div>
           </>
         )}
       </div>
 
-      {/* Plan type filter */}
-      {plans.length > 0 && !editMode && (
-        <PlanTypeFilter value={planTypeFilter} onChange={setPlanTypeFilter} />
+      {/* Search */}
+      {!editMode && (
+        <SearchBar placeholder="搜索计划标题..." value={searchQuery} onChange={setSearchQuery} />
       )}
 
-      {/* Merged row: tag filter + sort + view toggle */}
-      {tagFilterItems.length > 0 ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <TagFilterBar
-              tags={tagFilterItems}
-              activeTag={activeFilterTag}
-              totalItems={filteredPlans.length}
-              onSelect={setActiveFilterTag}
-              onRenameTag={handleRenameTag}
-              onDeleteTag={handleDeleteTag}
-            />
-          </div>
-          {!editMode && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-              <SortDropdown
-                sortOptions={[
-                  { value: 'time', label: '时间', icon: <Clock size={12} /> },
-                  { value: 'name', label: '名称', icon: <ArrowDownAZ size={12} /> },
-                  { value: 'planDate', label: '计划日期', icon: <Calendar size={12} /> },
-                ]}
-                currentSort={sortBy}
-                onSortChange={(v) => setSortBy(v as 'time' | 'name' | 'planDate')}
-              />
-              <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.06)' }} />
-              <div style={{ display: 'flex', gap: 2 }}>
-                <button title="卡片视图" onClick={() => setViewMode('card')} style={{
-                  padding: '3px 5px', borderRadius: 4, border: 'none', cursor: 'pointer',
-                  background: viewMode === 'card' ? 'var(--accent-blue)' : 'transparent',
-                  color: viewMode === 'card' ? '#fff' : 'var(--text-quaternary)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'background 0.15s ease, color 0.15s ease',
-                }}><LayoutGrid size={11} /></button>
-                <button title="紧凑视图" onClick={() => setViewMode('compact')} style={{
-                  padding: '3px 5px', borderRadius: 4, border: 'none', cursor: 'pointer',
-                  background: viewMode === 'compact' ? 'var(--accent-blue)' : 'transparent',
-                  color: viewMode === 'compact' ? '#fff' : 'var(--text-quaternary)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'background 0.15s ease, color 0.15s ease',
-                }}><Grid3X3 size={11} /></button>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : !editMode && plans.length > 0 ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
-          <SortDropdown
-            sortOptions={[
-              { value: 'time', label: '时间', icon: <Clock size={12} /> },
-              { value: 'name', label: '名称', icon: <ArrowDownAZ size={12} /> },
-              { value: 'planDate', label: '计划日期', icon: <Calendar size={12} /> },
-            ]}
-            currentSort={sortBy}
-            onSortChange={(v) => setSortBy(v as 'time' | 'name' | 'planDate')}
+      {/* Toolbar + divider */}
+      {!editMode && plans.length > 0 && (
+        <>
+          <PlanToolbar
+            plans={filteredPlans}
+            planTypeFilter={planTypeFilter}
+            onPlanTypeFilterChange={setPlanTypeFilter}
+            activeFilterTag={activeFilterTag}
+            onActiveFilterTagChange={setActiveFilterTag}
+            sortBy={sortBy}
+            onSortByChange={setSortBy}
+            viewMode={viewMode}
+            onViewModeChange={(mode) => {
+              if (mode === 'calendar') onSwitchToCalendar()
+              else setViewMode(mode)
+            }}
+            editMode={editMode}
           />
-          <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.06)' }} />
-          <div style={{ display: 'flex', gap: 2 }}>
-            <button onClick={() => setViewMode('card')} style={{
-              padding: '3px 5px', borderRadius: 4, border: 'none', cursor: 'pointer',
-              background: viewMode === 'card' ? 'var(--accent-blue)' : 'transparent',
-              color: viewMode === 'card' ? '#fff' : 'var(--text-quaternary)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background 0.15s ease, color 0.15s ease',
-            }}><LayoutGrid size={11} /></button>
-            <button onClick={() => setViewMode('compact')} style={{
-              padding: '3px 5px', borderRadius: 4, border: 'none', cursor: 'pointer',
-              background: viewMode === 'compact' ? 'var(--accent-blue)' : 'transparent',
-              color: viewMode === 'compact' ? '#fff' : 'var(--text-quaternary)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background 0.15s ease, color 0.15s ease',
-            }}><Grid3X3 size={11} /></button>
-          </div>
-        </div>
-      ) : null}
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '4px 12px' }} />
+        </>
+      )}
 
-      {/* Plan cards + empty state */}
-      <div className="flex-1 min-h-0 overflow-y-auto" style={{ display: 'grid', ...gridStyle }}>
-        {sortedPlans.map((plan) => {
-          const focusMin = getPlanFocusMinutes(plan.id)
-          const isSelected = selectedIds.has(plan.id)
-          const isActive = !editMode && activePlanId === plan.id
-
-          // --- Card view ---
-          if (viewMode === 'card') {
-            return (
-              <motion.div
-                key={plan.id}
-                onClick={() => {
-                  if (editMode) toggleSelect(plan.id)
-                  else setActivePlan(plan.id)
-                }}
-                whileTap={{ scale: 0.98 }}
-                className="group"
-                style={{
-                  background: isActive ? 'rgba(255,255,255,0.06)' : 'var(--bg-secondary)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: 12,
-                  border: isSelected ? '0.5px solid rgba(10,132,255,0.20)' : isActive ? '0.5px solid rgba(255,255,255,0.10)' : '0.5px solid rgba(255,255,255,0.04)',
-                  borderLeft: `3px solid ${plan.color}`,
-                  cursor: 'pointer',
-                  transition: 'background 0.2s ease, border-color 0.2s ease',
-                  position: 'relative',
-                }}
-                onMouseEnter={(e) => {
-                  if (!editMode && !isActive) {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!editMode && !isActive) {
-                    e.currentTarget.style.background = 'var(--bg-secondary)'
-                  }
-                }}
-              >
-                {/* Edit mode checkbox overlay */}
-                {editMode && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); toggleSelect(plan.id) }}
-                    style={{
-                      position: 'absolute', top: 8, right: 8,
-                      background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                      color: isSelected ? 'var(--accent-blue)' : 'var(--text-quaternary)',
-                      transition: 'color 0.15s ease',
-                    }}
-                  >
-                    {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-                  </button>
-                )}
-
-                {/* Icon + title row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                  {planIcon(plan)}
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>{plan.title}</span>
-                </div>
-
-                {/* Date + focus time row */}
-                <div style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 6 }}>
-                  <span>🗓 {formatDateRangeFull(plan)}</span>
-                  <span style={{ color: focusMin > 0 ? 'var(--accent-teal)' : 'var(--text-quaternary)' }}>⏱ {formatFocusTime(focusMin)}</span>
-                </div>
-
-                {/* Tags */}
-                {(plan.tags ?? []).length > 0 && (
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' as const, alignItems: 'center' }}>
-                    {(plan.tags ?? []).slice(0, 3).map((tag) => (
-                      <TagBadge key={tag} tag={tag} />
-                    ))}
-                    {(plan.tags ?? []).length > 3 && (
-                      <span style={{ fontSize: 10, color: 'var(--text-quaternary)', lineHeight: '18px' }}>
-                        +{(plan.tags ?? []).length - 3}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {/* Actions on hover (non-edit mode) */}
-                {!editMode && (
-                  <div className="flex items-center opacity-0 group-hover:opacity-100" style={{
-                    position: 'absolute', bottom: 8, right: 8,
-                    transition: 'opacity 0.15s ease',
-                  }}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleStartFocusFromPlan(plan.id)
-                      }}
-                      style={{
-                        background: 'transparent', border: 'none',
-                        color: '#0A84FF', cursor: 'pointer', padding: 4,
-                        borderRadius: 'var(--radius-sm)',
-                        transition: 'transform 0.15s ease',
-                        flexShrink: 0,
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.15)' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
-                    >
-                      <Play size={14} fill="currentColor" />
-                    </button>
-                    <MoreButton onClick={(e) => {
-                      e.stopPropagation()
-                      const rect = e.currentTarget.getBoundingClientRect()
-                      setContextMenu({ planId: plan.id, rect })
-                    }} />
-                  </div>
-                )}
-              </motion.div>
-            )
-          }
-
-          // --- Compact view ---
-          return (
-            <motion.div
+      {/* Card list */}
+      <div className="flex-1 min-h-0 overflow-y-auto" style={{
+        display: viewMode === 'compact' ? 'grid' : 'flex',
+        flexDirection: 'column',
+        ...(viewMode === 'compact'
+          ? { gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, alignContent: 'start' }
+          : { gap: 8, padding: '0 12px' }),
+      }}>
+        {sortedPlans.length === 0 && !editMode ? (
+          <motion.div style={{
+            flex: 1, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 6,
+          }}>
+            <Calendar size={28} style={{ color: '#48484a', opacity: 0.4 }} strokeWidth={1.2} />
+            <span style={{ fontSize: 12, color: '#48484a' }}>
+              {searchQuery ? '未找到匹配的计划' : plans.length === 0 ? '暂无计划' : '未找到匹配的计划'}
+            </span>
+          </motion.div>
+        ) : (
+          sortedPlans.map((plan) => (
+            <PlanCard
               key={plan.id}
-              onClick={() => {
-                if (editMode) toggleSelect(plan.id)
-                else setActivePlan(plan.id)
-              }}
-              whileTap={{ scale: 0.98 }}
-              style={{
-                background: isSelected ? 'rgba(10,132,255,0.06)' : isActive ? 'rgba(255,255,255,0.06)' : 'var(--bg-secondary)',
-                borderRadius: 'var(--radius-md)',
-                padding: 8,
-                textAlign: 'center' as const,
-                borderTop: `2px solid ${plan.color}`,
-                cursor: 'pointer',
-                borderLeft: isSelected ? '0.5px solid rgba(10,132,255,0.20)' : undefined,
-              }}
-              onMouseEnter={(e) => {
-                if (!editMode && !isActive && !isSelected) {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!editMode && !isActive && !isSelected) {
-                  e.currentTarget.style.background = 'var(--bg-secondary)'
-                }
-              }}
-            >
-              {editMode ? (
-                <button
-                  onClick={(e) => { e.stopPropagation(); toggleSelect(plan.id) }}
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                    color: isSelected ? 'var(--accent-blue)' : 'var(--text-quaternary)',
-                    transition: 'color 0.15s ease',
-                  }}
-                >
-                  {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-                </button>
-              ) : (
-                <div style={{ display: 'flex', justifyContent: 'center', color: plan.color }}>
-                  {planIcon(plan)}
-                </div>
-              )}
-
-              <span style={{ fontSize: 10, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {plan.title}
-              </span>
-              <span style={{ fontSize: 10, color: 'var(--text-quaternary)', marginTop: 2, display: 'block' }}>
-                {formatDateRange(plan)}
-              </span>
-            </motion.div>
-          )
-        })}
-        {/* Empty state */}
-        <AnimatePresence mode="wait">
-          {sortedPlans.length === 0 && !editMode && (
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.15 }}
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-              }}
-            >
-              <Calendar size={28} style={{ color: 'var(--text-quaternary)', opacity: 0.4 }} strokeWidth={1.2} />
-              <span style={{ font: 'var(--text-caption-1)', color: 'var(--text-quaternary)' }}>
-                暂无计划
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              plan={plan}
+              viewMode={viewMode}
+              isActive={activePlanId === plan.id}
+              isSelected={selectedIds.has(plan.id)}
+              editMode={editMode}
+              searchQuery={searchQuery || undefined}
+              onFocusClick={handleStartFocusFromPlan}
+              onMoreClick={(planId, rect) => setContextMenu({ planId, rect })}
+              onClick={setActivePlan}
+              onToggleSelect={toggleSelect}
+            />
+          ))
+        )}
       </div>
 
       {/* Batch delete action bar */}
@@ -546,16 +286,30 @@ export default function PlanList() {
             <span style={{ font: 'var(--text-caption-1)', color: 'var(--text-secondary)', fontWeight: 500 }}>
               已选 {selectedIds.size} 项
             </span>
-            <Button
-              variant="danger"
-              motionProps={{ whileTap: { scale: 0.95 } }}
-              onClick={handleBatchDelete}
-            >
+            <Button variant="danger" motionProps={{ whileTap: { scale: 0.95 } }} onClick={handleBatchDelete}>
               删除
             </Button>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* FAB */}
+      {!editMode && (
+        <div
+          onClick={() => setShowCreateDialog(true)}
+          style={{
+            position: 'absolute', bottom: 16, right: 16,
+            width: 38, height: 38, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #0A84FF, #5856D6)',
+            boxShadow: '0 4px 14px rgba(10,132,255,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', fontSize: 18, color: '#fff', fontWeight: 300,
+            zIndex: 10,
+          }}
+        >
+          +
+        </div>
+      )}
 
       {/* Create dialog */}
       {showCreateDialog && (
@@ -565,7 +319,7 @@ export default function PlanList() {
         />
       )}
 
-      {/* Delete confirmation dialog */}
+      {/* Delete confirmation */}
       <ConfirmDialog
         open={!!deleteTarget}
         title="确认删除"
@@ -576,6 +330,7 @@ export default function PlanList() {
         onCancel={() => setDeleteTarget(null)}
       />
 
+      {/* Context menu */}
       {contextMenu && (
         <ContextMenu
           items={[
@@ -589,6 +344,7 @@ export default function PlanList() {
         />
       )}
 
+      {/* Edit dialog */}
       {editTarget && (() => {
         const targetPlan = plans.find((p) => p.id === editTarget)
         if (!targetPlan) return null

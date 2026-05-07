@@ -55,7 +55,7 @@ export default function PlannerPanel() {
 
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {view === 'list' ? <PlanList /> : <CalendarView />}
+        {view === 'list' ? <PlanList onSwitchToCalendar={() => setView('calendar')} /> : <CalendarView />}
       </div>
     </div>
   )
