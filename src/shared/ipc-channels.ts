@@ -33,6 +33,7 @@ export const IPC = {
   AUTOLAUNCH_ENABLE: 'autolaunch:enable',
   AUTOLAUNCH_DISABLE: 'autolaunch:disable',
   HOTKEY_QUICK_CAPTURE: 'hotkey:quickCapture',
+  HOTKEY_REGISTER: 'hotkey:register',
   PET_CURSOR_HOVER: 'pet:cursor-hover',
   PET_START_TRACKING: 'pet:startTracking',
   PET_STOP_TRACKING: 'pet:stopTracking',

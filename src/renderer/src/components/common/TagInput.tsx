@@ -106,13 +106,13 @@ export default function TagInput({ tags, allTags, onUpdateTags, placeholder = 'æ
               removeTag(tags[tags.length - 1])
             }
           }}
-          placeholder={tags.length === 0 ? placeholder : ''}
+          placeholder={placeholder}
           style={{
             background: 'transparent',
             border: 'none',
             outline: 'none',
-            font: 'var(--text-caption-1)',
-            color: 'var(--text-primary)',
+            fontSize: 11,
+            color: 'var(--text-secondary)',
             width: '100%',
             minWidth: 60,
           }}

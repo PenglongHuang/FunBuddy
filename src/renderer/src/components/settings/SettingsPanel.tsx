@@ -1,10 +1,11 @@
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePlanStore } from '@/stores/planStore'
 import { useNoteStore } from '@/stores/noteStore'
-import { dialog, fs, store } from '@/lib/ipc'
+import { dialog, fs, store, hotkey } from '@/lib/ipc'
 import { FolderOpen, Timer, Zap, Database, Check, Pencil } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useToast } from '@/components/common/Toast'
+import { HotkeyRecorder } from './HotkeyRecorder'
 
 /* ============================================
    iOS/macOS-style Toggle Switch
@@ -228,6 +229,7 @@ export default function SettingsPanel() {
   const [pendingPomodoro, setPendingPomodoro] = useState(pomodoro)
   const [pendingApp, setPendingApp] = useState(app)
   const [isDirty, setIsDirty] = useState(false)
+  const [hotkeyError, setHotkeyError] = useState<string | null>(null)
 
   useEffect(() => {
     fs.getStorageDir().then(setEffectiveDir)
@@ -262,6 +264,15 @@ export default function SettingsPanel() {
   }
 
   const handleSave = async () => {
+    if (pendingApp.quickCaptureHotkey !== app.quickCaptureHotkey) {
+      const result = await hotkey.register(pendingApp.quickCaptureHotkey)
+      if (!result.success) {
+        setHotkeyError(result.error || '注册失败')
+        return
+      }
+      setHotkeyError(null)
+    }
+
     await Promise.all([
       updatePomodoro(pendingPomodoro),
       updateApp(pendingApp),
@@ -600,19 +611,16 @@ export default function SettingsPanel() {
           value={pendingApp.closeToTray}
           onChange={(v) => { const next = { ...pendingApp, closeToTray: v }; setPendingApp(next); checkDirty(pendingPomodoro, next) }}
         />
-        <div className="flex items-center justify-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--separator)' }}>
-          <span className="text-caption-1" style={{ color: 'var(--text-primary)' }}>快捷笔记快捷键</span>
-          <span
-            className="font-mono text-caption-1 px-2 py-1 inline-block"
-            style={{
-              color: 'var(--text-secondary)',
-              background: 'var(--bg-tertiary)',
-              borderRadius: 'var(--radius-sm)',
-            }}
-          >
-            {app.quickCaptureHotkey}
-          </span>
-        </div>
+        <HotkeyRecorder
+          value={pendingApp.quickCaptureHotkey}
+          onChange={(v) => {
+            const next = { ...pendingApp, quickCaptureHotkey: v }
+            setPendingApp(next)
+            checkDirty(pendingPomodoro, next)
+            setHotkeyError(null)
+          }}
+          error={hotkeyError}
+        />
       </SettingsGroup>
 
       {/* ===== Editor Group ===== */}

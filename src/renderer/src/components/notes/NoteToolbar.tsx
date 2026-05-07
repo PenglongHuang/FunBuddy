@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import Dropdown from '@/components/common/Dropdown'
+import TagFilterDropdown from '@/components/common/TagFilterDropdown'
 import { getTagsWithCounts } from '@/lib/tag-utils'
 import type { Note } from '@/types/note'
 
@@ -35,7 +36,6 @@ export default function NoteToolbar({
   editMode,
 }: NoteToolbarProps) {
   const [sortOpen, setSortOpen] = useState(false)
-  const [tagOpen, setTagOpen] = useState(false)
 
   const tagItems = useMemo(() => getTagsWithCounts(notes), [notes])
 
@@ -47,22 +47,6 @@ export default function NoteToolbar({
       setSortOpen(false)
     },
     [onSortByChange],
-  )
-
-  const handleTagSelect = useCallback(
-    (tag: string) => {
-      onActiveFilterTagChange(tag)
-      setTagOpen(false)
-    },
-    [onActiveFilterTagChange],
-  )
-
-  const handleClearTag = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      onActiveFilterTagChange(null)
-    },
-    [onActiveFilterTagChange],
   )
 
   // Entire toolbar hidden during edit mode
@@ -77,7 +61,17 @@ export default function NoteToolbar({
         gap: 8,
       }}
     >
-      {/* Sort dropdown */}
+      {/* Tag dropdown — leftmost */}
+      <TagFilterDropdown
+        tags={tagItems}
+        activeTag={activeFilterTag}
+        onTagChange={onActiveFilterTagChange}
+      />
+
+      {/* Spacer */}
+      <div style={{ flex: 1 }} />
+
+      {/* Sort dropdown — before view toggle */}
       <Dropdown
         trigger={
           <button
@@ -132,107 +126,7 @@ export default function NoteToolbar({
         </div>
       </Dropdown>
 
-      {/* Tag dropdown */}
-      <Dropdown
-        trigger={
-          activeFilterTag !== null ? (
-            <button
-              onClick={() => setTagOpen((prev) => !prev)}
-              style={{
-                fontSize: 9,
-                color: '#64D2FF',
-                background: 'rgba(10,132,255,0.12)',
-                border: '0.5px solid rgba(10,132,255,0.2)',
-                borderRadius: 10,
-                cursor: 'pointer',
-                padding: '3px 8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                outline: 'none',
-              }}
-            >
-              🏷 {activeFilterTag}
-              <span
-                onClick={handleClearTag}
-                style={{
-                  cursor: 'pointer',
-                  opacity: 0.7,
-                  fontSize: 10,
-                  lineHeight: 1,
-                }}
-              >
-                ✕
-              </span>
-            </button>
-          ) : (
-            <button
-              onClick={() => setTagOpen((prev) => !prev)}
-              style={{
-                fontSize: 9,
-                color: '#8e8e93',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '3px 6px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 2,
-                outline: 'none',
-              }}
-            >
-              🏷 标签 ▾
-            </button>
-          )
-        }
-        open={tagOpen}
-        onClose={() => setTagOpen(false)}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {tagItems.length === 0 && (
-            <span style={{ fontSize: 10, color: '#636366', padding: '4px 8px' }}>
-              暂无标签
-            </span>
-          )}
-          {tagItems.map((tag) => (
-            <button
-              key={tag.name}
-              onClick={() => handleTagSelect(tag.name)}
-              style={{
-                fontSize: 11,
-                color: activeFilterTag === tag.name ? '#64D2FF' : '#ccc',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '4px 8px',
-                borderRadius: 6,
-                textAlign: 'left',
-                outline: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                transition: 'background 0.1s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'none'
-              }}
-            >
-              <span>{tag.name}</span>
-              <span style={{ fontSize: 9, color: '#636366', marginLeft: 8 }}>
-                {tag.count}
-              </span>
-            </button>
-          ))}
-        </div>
-      </Dropdown>
-
-      {/* Spacer */}
-      <div style={{ flex: 1 }} />
-
-      {/* View toggle */}
+      {/* View toggle — far right */}
       <div
         style={{
           display: 'flex',

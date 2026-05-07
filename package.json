@@ -16,8 +16,7 @@
     "electron-store": "^10.0.0",
     "highlight.js": "^11.11.1",
     "lucide-react": "^1.11.0",
-    "marked": "^18.0.2",
-    "vditor": "^3.11.2"
+    "marked": "^18.0.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.4",

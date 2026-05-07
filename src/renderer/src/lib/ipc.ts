@@ -81,6 +81,11 @@ export const autolaunch = {
   disable: (): Promise<void> => window.api.autolaunchDisable(),
 }
 
+export const hotkey = {
+  register: (accelerator: string): Promise<{ success: boolean; error?: string }> =>
+    window.api.hotkeyRegister(accelerator),
+}
+
 export const storeEvents = {
   onDidChange: (callback: (key: string, newValue: unknown, oldValue: unknown) => void) =>
     window.api.onStoreDidChange(callback),

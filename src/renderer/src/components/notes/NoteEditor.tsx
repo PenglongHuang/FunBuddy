@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNoteStore } from '@/stores/noteStore'
 import MarkdownEditor from '@/components/common/MarkdownEditor'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
-import LiveMarkdownEditor from '@/components/common/LiveMarkdownEditor'
+import SplitPaneLiveEditor from '@/components/common/SplitPaneLiveEditor'
 import TableOfContents from '@/components/common/TableOfContents'
 import { ArrowLeft, Pencil, Eye, Zap, List } from 'lucide-react'
 import TagInput from '@/components/common/TagInput'
@@ -162,20 +162,42 @@ export default function NoteEditor() {
         for (let i = 0; i < lineIndex; i++) pos += (lines[i]?.length ?? 0) + 1
         textarea.focus()
         textarea.setSelectionRange(pos, pos)
-        textarea.scrollTop = lineIndex * 20
+        const style = getComputedStyle(textarea)
+        const measure = document.createElement('div')
+        measure.style.cssText = [
+          'position:absolute', 'visibility:hidden', 'white-space:pre-wrap',
+          'word-wrap:break-word', `width:${style.width}`, `font:${style.font}`,
+          `padding:${style.padding}`, `border:${style.border}`,
+          `line-height:${style.lineHeight}`, `letter-spacing:${style.letterSpacing}`,
+        ].join(';')
+        measure.textContent = content.substring(0, pos)
+        document.body.appendChild(measure)
+        textarea.scrollTop = measure.offsetHeight - parseInt(style.paddingTop || '0')
+        document.body.removeChild(measure)
       }
       return
     }
 
     if (mode === 'live') {
-      const headings = extractHeadings(content, tocMaxLevel)
-      const targetIdx = headings.findIndex(h => h.lineIndex === lineIndex)
-      if (targetIdx !== -1) {
-        const headingEls = editorRef.current.querySelectorAll('.vditor-ir h1, .vditor-ir h2, .vditor-ir h3, .vditor-ir h4, .vditor-ir h5, .vditor-ir h6')
-        if (headingEls.length > targetIdx) {
-          const el = headingEls[targetIdx] as HTMLElement
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        }
+      const textarea = editorRef.current.querySelector('textarea')
+      if (textarea) {
+        const lines = content.split('\n')
+        let pos = 0
+        for (let i = 0; i < lineIndex; i++) pos += (lines[i]?.length ?? 0) + 1
+        textarea.focus()
+        textarea.setSelectionRange(pos, pos)
+        const style = getComputedStyle(textarea)
+        const measure = document.createElement('div')
+        measure.style.cssText = [
+          'position:absolute', 'visibility:hidden', 'white-space:pre-wrap',
+          'word-wrap:break-word', `width:${style.width}`, `font:${style.font}`,
+          `padding:${style.padding}`, `border:${style.border}`,
+          `line-height:${style.lineHeight}`, `letter-spacing:${style.letterSpacing}`,
+        ].join(';')
+        measure.textContent = content.substring(0, pos)
+        document.body.appendChild(measure)
+        textarea.scrollTop = measure.offsetHeight - parseInt(style.paddingTop || '0')
+        document.body.removeChild(measure)
       }
       return
     }
@@ -250,8 +272,8 @@ export default function NoteEditor() {
         {/* Mode toggle */}
         <div className="flex gap-0.5" style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', padding: 2 }}>
           {([
-            ['live', Zap],
             ['edit', Pencil],
+            ['live', Zap],
             ['preview', Eye],
           ] as const).map(([m, Icon]) => (
             <motion.button
@@ -285,9 +307,9 @@ export default function NoteEditor() {
       />
 
       {/* Editor / Preview */}
-      <div ref={editorRef} className="flex-1 min-h-0" style={{ overflow: 'auto' }}>
+      <div ref={editorRef} className="flex-1 min-h-0" style={{ overflow: mode === 'preview' ? 'auto' : 'hidden' }}>
         {mode === 'live' ? (
-          <LiveMarkdownEditor key={activeNoteId} value={content} onChange={handleChange} onCursorLineChange={setCurrentLineIndex} />
+          <SplitPaneLiveEditor key={activeNoteId} value={content} onChange={handleChange} onCursorLineChange={setCurrentLineIndex} />
         ) : mode === 'edit' ? (
           <MarkdownEditor value={content} onChange={handleChange} onCursorLineChange={setCurrentLineIndex} placeholder="# 标题\n\n内容..." />
         ) : (

@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import Dropdown from '@/components/common/Dropdown'
+import TagFilterDropdown from '@/components/common/TagFilterDropdown'
 import { getTagsWithCounts } from '@/lib/tag-utils'
 import type { Plan } from '@/types/plan'
 import type { PlanTypeFilterValue } from '@/components/common/PlanTypeFilter'
@@ -17,11 +18,11 @@ interface PlanToolbarProps {
   editMode: boolean
 }
 
-const TYPE_CHIPS: Array<{ value: PlanTypeFilterValue; label: string; color: string }> = [
+const TYPE_OPTIONS: Array<{ value: PlanTypeFilterValue; label: string; color: string }> = [
   { value: 'all', label: '全部', color: '#64D2FF' },
-  { value: 'daily', label: '每日', color: '#60a5fa' },
-  { value: 'weekly', label: '每周', color: '#c084fc' },
-  { value: 'monthly', label: '每月', color: '#fbbf24' },
+  { value: 'daily', label: '日计划', color: '#60a5fa' },
+  { value: 'weekly', label: '周计划', color: '#c084fc' },
+  { value: 'monthly', label: '月计划', color: '#fbbf24' },
 ]
 
 const SORT_OPTIONS: Array<{ value: 'time' | 'name' | 'planDate'; label: string }> = [
@@ -48,12 +49,21 @@ export default function PlanToolbar({
   onViewModeChange,
   editMode,
 }: PlanToolbarProps) {
+  const [typeOpen, setTypeOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
-  const [tagOpen, setTagOpen] = useState(false)
 
   const tagItems = useMemo(() => getTagsWithCounts(plans), [plans])
 
+  const currentTypeLabel = TYPE_OPTIONS.find((o) => o.value === planTypeFilter)?.label ?? '全部'
   const currentSortLabel = SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? '时间'
+
+  const handleTypeSelect = useCallback(
+    (value: PlanTypeFilterValue) => {
+      onPlanTypeFilterChange(value)
+      setTypeOpen(false)
+    },
+    [onPlanTypeFilterChange],
+  )
 
   const handleSortSelect = useCallback(
     (value: 'time' | 'name' | 'planDate') => {
@@ -63,78 +73,90 @@ export default function PlanToolbar({
     [onSortByChange],
   )
 
-  const handleTagSelect = useCallback(
-    (tag: string) => {
-      onActiveFilterTagChange(tag)
-      setTagOpen(false)
-    },
-    [onActiveFilterTagChange],
-  )
-
-  const handleClearTag = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      onActiveFilterTagChange(null)
-    },
-    [onActiveFilterTagChange],
-  )
-
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        height: 28,
-        gap: 8,
-      }}
-    >
-      {/* Type chips */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        {TYPE_CHIPS.map((chip) => {
-          const isActive = planTypeFilter === chip.value
-          return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {/* Type filter dropdown */}
+      {!editMode && (
+        <Dropdown
+          trigger={
             <button
-              key={chip.value}
-              onClick={() => onPlanTypeFilterChange(chip.value)}
+              onClick={() => setTypeOpen((prev) => !prev)}
               style={{
+                fontSize: 9,
+                color: '#8e8e93',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '3px 6px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 4,
-                fontSize: 9,
-                padding: '3px 8px',
-                borderRadius: 6,
-                cursor: 'pointer',
-                border: '0.5px solid',
-                borderColor: isActive
-                  ? 'rgba(10,132,255,0.3)'
-                  : 'rgba(255,255,255,0.06)',
-                background: isActive
-                  ? 'rgba(10,132,255,0.15)'
-                  : 'transparent',
-                color: isActive ? '#64D2FF' : '#8e8e93',
+                gap: 2,
                 outline: 'none',
-                transition: 'background 0.15s ease, color 0.15s ease, border-color 0.15s ease',
               }}
             >
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  background: chip.color,
-                  flexShrink: 0,
-                }}
-              />
-              {chip.label}
+              ▾ {currentTypeLabel}
             </button>
-          )
-        })}
-      </div>
+          }
+          open={typeOpen}
+          onClose={() => setTypeOpen(false)}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {TYPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => handleTypeSelect(opt.value)}
+                style={{
+                  fontSize: 11,
+                  color: planTypeFilter === opt.value ? '#64D2FF' : '#ccc',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  textAlign: 'left',
+                  outline: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  transition: 'background 0.1s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'none'
+                }}
+              >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: opt.color,
+                    flexShrink: 0,
+                  }}
+                />
+                {planTypeFilter === opt.value ? '✓ ' : ''}
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </Dropdown>
+      )}
+
+      {/* Tag dropdown */}
+      {!editMode && (
+        <TagFilterDropdown
+          tags={tagItems}
+          activeTag={activeFilterTag}
+          onTagChange={onActiveFilterTagChange}
+        />
+      )}
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Sort, tag, view toggle — hidden in edit mode */}
+      {/* Sort + View toggle — hidden in edit mode */}
       {!editMode && (
         <>
           {/* Sort dropdown */}
@@ -192,104 +214,7 @@ export default function PlanToolbar({
             </div>
           </Dropdown>
 
-          {/* Tag dropdown */}
-          <Dropdown
-            trigger={
-              activeFilterTag !== null ? (
-                <button
-                  onClick={() => setTagOpen((prev) => !prev)}
-                  style={{
-                    fontSize: 9,
-                    color: '#64D2FF',
-                    background: 'rgba(10,132,255,0.12)',
-                    border: '0.5px solid rgba(10,132,255,0.2)',
-                    borderRadius: 10,
-                    cursor: 'pointer',
-                    padding: '3px 8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    outline: 'none',
-                  }}
-                >
-                  🏷 {activeFilterTag}
-                  <span
-                    onClick={handleClearTag}
-                    style={{
-                      cursor: 'pointer',
-                      opacity: 0.7,
-                      fontSize: 10,
-                      lineHeight: 1,
-                    }}
-                  >
-                    ✕
-                  </span>
-                </button>
-              ) : (
-                <button
-                  onClick={() => setTagOpen((prev) => !prev)}
-                  style={{
-                    fontSize: 9,
-                    color: '#8e8e93',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '3px 6px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 2,
-                    outline: 'none',
-                  }}
-                >
-                  🏷 标签 ▾
-                </button>
-              )
-            }
-            open={tagOpen}
-            onClose={() => setTagOpen(false)}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {tagItems.length === 0 && (
-                <span style={{ fontSize: 10, color: '#636366', padding: '4px 8px' }}>
-                  暂无标签
-                </span>
-              )}
-              {tagItems.map((tag) => (
-                <button
-                  key={tag.name}
-                  onClick={() => handleTagSelect(tag.name)}
-                  style={{
-                    fontSize: 11,
-                    color: activeFilterTag === tag.name ? '#64D2FF' : '#ccc',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '4px 8px',
-                    borderRadius: 6,
-                    textAlign: 'left',
-                    outline: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    transition: 'background 0.1s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'none'
-                  }}
-                >
-                  <span>{tag.name}</span>
-                  <span style={{ fontSize: 9, color: '#636366', marginLeft: 8 }}>
-                    {tag.count}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </Dropdown>
-
-          {/* View toggle */}
+          {/* View toggle — far right */}
           <div
             style={{
               display: 'flex',

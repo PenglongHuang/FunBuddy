@@ -66,6 +66,8 @@ const api = {
     ipcRenderer.on(IPC.HOTKEY_QUICK_CAPTURE, handler)
     return () => ipcRenderer.removeListener(IPC.HOTKEY_QUICK_CAPTURE, handler)
   },
+  hotkeyRegister: (accelerator: string) =>
+    ipcRenderer.invoke(IPC.HOTKEY_REGISTER, accelerator),
 
   // Pet cursor tracking
   startPetTracking: () => ipcRenderer.invoke(IPC.PET_START_TRACKING),

@@ -5,6 +5,7 @@ import { join, dirname } from 'path'
 import { getStore } from './store'
 import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode, startPetCursorTracking, stopPetCursorTracking, setPetDragging, movePetDrag } from './window'
 import { IPC } from '../shared/ipc-channels'
+import { registerHotkeys } from './hotkey'
 
 export function registerIpcHandlers(): void {
   const store = getStore()
@@ -230,6 +231,19 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.AUTOLAUNCH_DISABLE, () => {
     app.setLoginItemSettings({ openAtLogin: false })
+  })
+
+  // Hotkey re-registration
+  ipcMain.handle(IPC.HOTKEY_REGISTER, (_e, accelerator: string) => {
+    if (!accelerator || typeof accelerator !== 'string') {
+      return { success: false, error: '无效的快捷键' }
+    }
+    const success = registerHotkeys(accelerator)
+    if (!success) {
+      return { success: false, error: '快捷键已被其他应用占用' }
+    }
+    store.set('settings.app.quickCaptureHotkey', accelerator)
+    return { success: true }
   })
 
   // Pet cursor tracking

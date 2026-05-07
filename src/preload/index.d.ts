@@ -25,6 +25,7 @@ export interface FunPetsAPI {
   autolaunchEnable: () => Promise<void>
   autolaunchDisable: () => Promise<void>
   onQuickCapture: (callback: () => void) => () => void
+  hotkeyRegister: (accelerator: string) => Promise<{ success: boolean; error?: string }>
   windowHide: () => Promise<void>
   windowMaximize: () => Promise<void>
   windowInvalidate: () => Promise<void>

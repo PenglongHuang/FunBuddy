@@ -37,7 +37,7 @@ export const useNoteStore = create<NoteStore>()(
     activeNoteId: null,
     sortBy: 'time',
     viewMode: 'card',
-    editorMode: 'live' as const,
+    editorMode: 'edit' as const,
     tocMaxLevel: 3,
 
     load: async () => {
@@ -62,7 +62,7 @@ export const useNoteStore = create<NoteStore>()(
         set({
           sortBy: (prefs.sortBy as any) ?? 'time',
           viewMode: (prefs.viewMode as any) ?? 'card',
-          editorMode: (prefs.editorMode as 'live' | 'edit' | 'preview') ?? 'live',
+          editorMode: (prefs.editorMode as 'live' | 'edit' | 'preview') ?? 'edit',
           tocMaxLevel: prefs.tocMaxLevel ?? 3,
         })
       }

@@ -79,34 +79,35 @@ function TodayView({ entries, resolvePlan, formatTime }: {
 }) {
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-      <div style={{ position: 'relative', paddingLeft: 18, maxHeight: 130, overflowY: 'auto' }}>
-        <div style={{ position: 'absolute', left: 5, top: 4, bottom: 4, width: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 1 }} />
-        {entries.slice(0, 10).map((entry, i) => {
-          const plan = resolvePlan(entry.planId)
-          const isLast = i === entries.length - 1
-          return (
-            <div key={entry.completedAt} style={{ position: 'relative', marginBottom: isLast ? 0 : 8 }}>
-              <div style={{ position: 'absolute', left: -15, top: 6, width: 8, height: 8, borderRadius: '50%', background: plan ? '#FF9F0A' : 'rgba(255,159,10,0.4)', border: '2px solid var(--bg-base)' }} />
-              <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)', padding: '6px 8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 500 }}>{formatTime(entry.completedAt)}</span>
-                  <span style={{ color: '#FF9F0A', fontSize: 11 }}>{entry.durationMinutes} min</span>
-                </div>
-                {plan ? (
-                  <div style={{ marginTop: 3 }}>
-                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: `${plan.color}18`, color: plan.color }}>{plan.title}</span>
+      {entries.length > 0 ? (
+        <div style={{ position: 'relative', paddingLeft: 18, maxHeight: 130, overflowY: 'auto' }}>
+          <div style={{ position: 'absolute', left: 5, top: 4, bottom: 4, width: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 1 }} />
+          {entries.slice(0, 10).map((entry, i) => {
+            const plan = resolvePlan(entry.planId)
+            const isLast = i === entries.length - 1
+            return (
+              <div key={entry.completedAt} style={{ position: 'relative', marginBottom: isLast ? 0 : 8 }}>
+                <div style={{ position: 'absolute', left: -15, top: 6, width: 8, height: 8, borderRadius: '50%', background: plan ? '#FF9F0A' : 'rgba(255,159,10,0.4)', border: '2px solid var(--bg-base)' }} />
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)', padding: '6px 8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 500 }}>{formatTime(entry.completedAt)}</span>
+                    <span style={{ color: '#FF9F0A', fontSize: 11 }}>{entry.durationMinutes} min</span>
                   </div>
-                ) : entry.planId ? (
-                  <div style={{ marginTop: 3, color: 'var(--text-quaternary)', fontSize: 10 }}>已删除计划</div>
-                ) : null}
+                  {plan ? (
+                    <div style={{ marginTop: 3 }}>
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: `${plan.color}18`, color: plan.color }}>{plan.title}</span>
+                    </div>
+                  ) : entry.planId ? (
+                    <div style={{ marginTop: 3, color: 'var(--text-quaternary)', fontSize: 10 }}>已删除计划</div>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          )
-        })}
-        {entries.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-quaternary)', fontSize: 12 }}>今天还没有专注记录</div>
-        )}
-      </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-quaternary)', fontSize: 12 }}>今天还没有专注记录</div>
+      )}
     </motion.div>
   )
 }

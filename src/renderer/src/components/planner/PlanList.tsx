@@ -77,19 +77,7 @@ export default function PlanList({ onSwitchToCalendar }: PlanListProps) {
     return sorted
   }, [filteredPlans, sortBy])
 
-  useEffect(() => {
-    if (activeFilterTag !== null) {
-      const remaining = plans.filter((p) => (p.tags ?? []).includes(activeFilterTag))
-      if (remaining.length === 0) setActiveFilterTag(null)
-    }
-  }, [plans, activeFilterTag])
 
-  useEffect(() => {
-    if (planTypeFilter !== 'all') {
-      const remaining = plans.filter((p) => p.planType === planTypeFilter)
-      if (remaining.length === 0) setPlanTypeFilter('all')
-    }
-  }, [plans, planTypeFilter])
 
   const visibleIds = useMemo(() => new Set(sortedPlans.map((p) => p.id)), [sortedPlans])
   const allSelected = sortedPlans.length > 0 && sortedPlans.every((p) => selectedIds.has(p.id))

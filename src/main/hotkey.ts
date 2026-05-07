@@ -3,11 +3,21 @@ import { join } from 'path'
 import { IPC } from '../shared/ipc-channels'
 
 let quickCaptureWin: BrowserWindow | null = null
+let currentAccelerator: string | null = null
 
-export function registerHotkeys(): void {
-  globalShortcut.register('Ctrl+Shift+N', () => {
+export function registerHotkeys(accelerator: string): boolean {
+  if (currentAccelerator) {
+    globalShortcut.unregister(currentAccelerator)
+  }
+  const success = globalShortcut.register(accelerator, () => {
     showQuickCapture()
   })
+  if (success) {
+    currentAccelerator = accelerator
+  } else if (currentAccelerator) {
+    globalShortcut.register(currentAccelerator, () => showQuickCapture())
+  }
+  return success
 }
 
 export function unregisterHotkeys(): void {

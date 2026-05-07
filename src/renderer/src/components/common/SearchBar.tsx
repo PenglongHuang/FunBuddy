@@ -13,8 +13,8 @@ export default function SearchBar({ placeholder, value, onChange }: SearchBarPro
   return (
     <div
       style={{
-        margin: '6px 12px 4px',
-        padding: '8px 12px',
+        margin: '4px 12px 2px',
+        padding: '5px 10px',
         background: active ? 'rgba(10,132,255,0.04)' : 'rgba(255,255,255,0.04)',
         borderRadius: 10,
         display: 'flex',
@@ -26,7 +26,7 @@ export default function SearchBar({ placeholder, value, onChange }: SearchBarPro
         transition: 'border-color 0.2s ease, background 0.2s ease',
       }}
     >
-      <span style={{ fontSize: 13, color: active ? '#64D2FF' : '#48484a' }}>🔍</span>
+      <span style={{ fontSize: 11, color: active ? '#64D2FF' : '#48484a' }}>🔍</span>
       <input
         type="text"
         value={value}
@@ -38,7 +38,7 @@ export default function SearchBar({ placeholder, value, onChange }: SearchBarPro
           background: 'transparent',
           border: 'none',
           outline: 'none',
-          fontSize: 12,
+          fontSize: 11,
           color: '#e5e5e7',
           flex: 1,
           fontFamily: 'inherit',
@@ -48,11 +48,11 @@ export default function SearchBar({ placeholder, value, onChange }: SearchBarPro
         <div
           onClick={() => onChange('')}
           style={{
-            fontSize: 10,
+            fontSize: 9,
             color: '#636366',
             cursor: 'pointer',
-            width: 18,
-            height: 18,
+            width: 15,
+            height: 15,
             borderRadius: '50%',
             background: 'rgba(255,255,255,0.08)',
             display: 'flex',

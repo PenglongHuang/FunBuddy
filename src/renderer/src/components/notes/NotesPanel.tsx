@@ -113,12 +113,7 @@ export default function NotesPanel() {
     setDeleteTarget(null)
   }
 
-  useEffect(() => {
-    if (activeTag !== null) {
-      const remaining = notes.filter((n) => (n.tags ?? []).includes(activeTag))
-      if (remaining.length === 0) setActiveTag(null)
-    }
-  }, [notes, activeTag])
+
 
   const exitEditMode = () => {
     setEditMode(false)
