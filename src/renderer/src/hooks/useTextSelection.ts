@@ -9,7 +9,7 @@ export interface TextSelectionState {
 }
 
 export default function useTextSelection(
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>
+  textareaEl: HTMLTextAreaElement | null
 ): TextSelectionState {
   const [state, setState] = useState<TextSelectionState>({
     selectedText: '',
@@ -22,7 +22,7 @@ export default function useTextSelection(
   const rafRef = useRef<number>(0)
 
   const updateSelection = useCallback(() => {
-    const ta = textareaRef.current
+    const ta = textareaEl
     if (!ta) return
 
     const start = ta.selectionStart
@@ -41,10 +41,10 @@ export default function useTextSelection(
       currentLine,
       lineIndex,
     })
-  }, [textareaRef])
+  }, [textareaEl])
 
   useEffect(() => {
-    const ta = textareaRef.current
+    const ta = textareaEl
     if (!ta) return
 
     const events = ['select', 'keyup', 'mouseup', 'focus'] as const
@@ -60,7 +60,7 @@ export default function useTextSelection(
       cancelAnimationFrame(rafRef.current)
       events.forEach((e) => ta.removeEventListener(e, handler))
     }
-  }, [textareaRef, updateSelection])
+  }, [textareaEl, updateSelection])
 
   return state
 }

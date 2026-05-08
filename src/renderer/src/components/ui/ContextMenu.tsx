@@ -49,15 +49,11 @@ function itemStyle(color?: string): React.CSSProperties {
   }
 }
 
-function SubmenuPanel({
-  items,
-  parentRect,
-  onClose,
-}: {
+const SubmenuPanel = React.forwardRef<HTMLDivElement, {
   items: ContextMenuItem[]
   parentRect: DOMRect
   onClose: () => void
-}) {
+}>(({ items, parentRect, onClose }, ref) => {
   const submenuStyle: React.CSSProperties = useMemo(() => {
     const viewportWidth = window.innerWidth
     const viewportHeight = window.innerHeight
@@ -109,6 +105,7 @@ function SubmenuPanel({
   return (
     <AnimatePresence>
       <motion.div
+        ref={ref}
         style={submenuStyle}
         initial={{ opacity: 0, scale: 0.95, x: -4 }}
         animate={{ opacity: 1, scale: 1, x: 0 }}
@@ -144,16 +141,19 @@ function SubmenuPanel({
       </motion.div>
     </AnimatePresence>
   )
-}
+})
 
 export default function ContextMenu({ items, anchorRect, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
+  const submenuRef = useRef<HTMLDivElement>(null)
   const [activeSubmenu, setActiveSubmenu] = useState<ContextMenuItem[] | null>(null)
   const [submenuAnchor, setSubmenuAnchor] = useState<DOMRect | null>(null)
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      if (menuRef.current && !menuRef.current.contains(target) &&
+          (!submenuRef.current || !submenuRef.current.contains(target))) {
         onClose()
       }
     }
@@ -246,6 +246,7 @@ export default function ContextMenu({ items, anchorRect, onClose }: ContextMenuP
           items={activeSubmenu}
           parentRect={submenuAnchor}
           onClose={onClose}
+          ref={submenuRef}
         />,
         document.body
       )}

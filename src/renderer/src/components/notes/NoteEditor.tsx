@@ -74,8 +74,8 @@ export default function NoteEditor() {
     anchorRect: DOMRect
     mode: 'edit' | 'live' | 'preview'
   } | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const selection = useTextSelection(textareaRef)
+  const [textareaEl, setTextareaEl] = useState<HTMLTextAreaElement | null>(null)
+  const selection = useTextSelection(textareaEl)
 
   const { showToast, ToastContainer } = useToast()
 
@@ -144,23 +144,23 @@ export default function NoteEditor() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  // Capture textarea ref from editorRef for useTextSelection
+  // Capture textarea element for useTextSelection (re-runs on mode/note change)
   useEffect(() => {
     if (editorRef.current) {
       const ta = editorRef.current.querySelector('textarea') as HTMLTextAreaElement | null
-      if (ta) textareaRef.current = ta
+      setTextareaEl(ta)
     }
-  })
+  }, [activeNoteId, mode])
 
   if (!note) return null
 
-  const handleChange = (newContent: string) => {
+  const handleChange = useCallback((newContent: string) => {
     setContent(newContent)
     setDirty(true)
 
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     autoSaveTimer.current = setTimeout(() => doSave(true), AUTO_SAVE_DELAY)
-  }
+  }, [doSave])
 
   const toggleToc = () => {
     setTocVisible(!tocVisible)
@@ -233,7 +233,7 @@ export default function NoteEditor() {
   const handleEditorContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     setContextMenuState({
-      anchorRect: e.currentTarget.getBoundingClientRect(),
+      anchorRect: DOMRect.fromRect({ width: 0, height: 0, x: e.clientX, y: e.clientY }),
       mode,
     })
   }, [mode])
@@ -241,19 +241,18 @@ export default function NoteEditor() {
   const handleApplyOperation = useCallback((newText: string, newStart: number, newEnd: number) => {
     handleChange(newText)
     requestAnimationFrame(() => {
-      const ta = textareaRef.current
-      if (ta) {
-        ta.focus()
-        ta.setSelectionRange(newStart, newEnd)
+      if (textareaEl) {
+        textareaEl.focus()
+        textareaEl.setSelectionRange(newStart, newEnd)
       }
     })
     setContextMenuState(null)
-  }, [handleChange])
+  }, [handleChange, textareaEl])
 
   const handlePreviewContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     setContextMenuState({
-      anchorRect: (e.target as HTMLElement).getBoundingClientRect(),
+      anchorRect: DOMRect.fromRect({ width: 0, height: 0, x: e.clientX, y: e.clientY }),
       mode: 'preview',
     })
   }, [])
