@@ -86,8 +86,8 @@ export default function MarkdownContextMenu({
       submenu: [
         { label: '加粗', icon: <Bold size={13} />, shortcut: '⌘B', disabled: !hasSelection, onClick: () => applyOp(wrapBold) },
         { label: '斜体', icon: <Italic size={13} />, shortcut: '⌘I', disabled: !hasSelection, onClick: () => applyOp(wrapItalic) },
-        { label: '删除线', icon: <Strikethrough size={13} />, disabled: !hasSelection, onClick: () => applyOp(wrapStrikethrough) },
-        { label: '高亮', icon: <Highlighter size={13} />, disabled: !hasSelection, onClick: () => applyOp(wrapHighlight) },
+        { label: '删除线', icon: <Strikethrough size={13} />, shortcut: '⌘⇧S', disabled: !hasSelection, onClick: () => applyOp(wrapStrikethrough) },
+        { label: '高亮', icon: <Highlighter size={13} />, shortcut: '⌘⇧H', disabled: !hasSelection, onClick: () => applyOp(wrapHighlight) },
       ],
     })
 
@@ -95,16 +95,16 @@ export default function MarkdownContextMenu({
     items.push({
       label: '段落样式', onClick: noop,
       submenu: [
-        { label: '标题 1', onClick: () => applyOp(toggleHeading(1)) },
-        { label: '标题 2', onClick: () => applyOp(toggleHeading(2)) },
-        { label: '标题 3', onClick: () => applyOp(toggleHeading(3)) },
+        { label: '标题 1', shortcut: '⌘⇧1', onClick: () => applyOp(toggleHeading(1)) },
+        { label: '标题 2', shortcut: '⌘⇧2', onClick: () => applyOp(toggleHeading(2)) },
+        { label: '标题 3', shortcut: '⌘⇧3', onClick: () => applyOp(toggleHeading(3)) },
         { label: '标题 4', onClick: () => applyOp(toggleHeading(4)) },
         { label: '标题 5', onClick: () => applyOp(toggleHeading(5)) },
         { label: '标题 6', onClick: () => applyOp(toggleHeading(6)) },
-        { label: '引用块', icon: <Quote size={13} />, onClick: () => applyOp(toggleBlockquote) },
-        { label: '无序列表', icon: <List size={13} />, onClick: () => applyOp(toggleUnorderedList) },
-        { label: '有序列表', icon: <ListOrdered size={13} />, onClick: () => applyOp(toggleOrderedList) },
-        { label: '任务列表', icon: <CheckSquare size={13} />, onClick: () => applyOp(toggleTaskList) },
+        { label: '引用块', icon: <Quote size={13} />, shortcut: '⌘⇧Q', onClick: () => applyOp(toggleBlockquote) },
+        { label: '无序列表', icon: <List size={13} />, shortcut: '⌘⇧U', onClick: () => applyOp(toggleUnorderedList) },
+        { label: '有序列表', icon: <ListOrdered size={13} />, shortcut: '⌘⇧L', onClick: () => applyOp(toggleOrderedList) },
+        { label: '任务列表', icon: <CheckSquare size={13} />, shortcut: '⌘⇧T', onClick: () => applyOp(toggleTaskList) },
       ],
     })
 
@@ -112,11 +112,11 @@ export default function MarkdownContextMenu({
     items.push({
       label: '插入元素', icon: <LinkIcon size={13} />, onClick: noop,
       submenu: [
-        { label: '超链接', icon: <LinkIcon size={13} />, onClick: () => applyOp(insertLink) },
+        { label: '超链接', icon: <LinkIcon size={13} />, shortcut: '⌘K', onClick: () => applyOp(insertLink) },
         { label: '表格', icon: <Table size={13} />, onClick: () => applyOp(insertTable) },
         { label: '分割线', icon: <Minus size={13} />, onClick: () => applyOp(insertHorizontalRule) },
         { label: '图片', icon: <Image size={13} />, onClick: () => applyOp(insertImage) },
-        { label: '代码块', icon: <Code size={13} />, onClick: () => applyOp(insertCodeBlock) },
+        { label: '代码块', icon: <Code size={13} />, shortcut: '⌘⇧C', onClick: () => applyOp(insertCodeBlock) },
       ],
     })
 

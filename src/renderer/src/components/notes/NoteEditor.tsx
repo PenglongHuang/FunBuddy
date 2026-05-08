@@ -14,6 +14,7 @@ import { extractH1Title } from '@/utils/markdown'
 import { extractHeadings } from '@/lib/toc-extract'
 import MarkdownContextMenu from '@/components/ui/MarkdownContextMenu'
 import useTextSelection from '@/hooks/useTextSelection'
+import { applyOperationToTextarea } from '@/lib/markdown-operations'
 
 const AUTO_SAVE_DELAY = 3000
 
@@ -243,30 +244,7 @@ export default function NoteEditor() {
 
   const handleApplyOperation = useCallback((newText: string, cursorStart: number, cursorEnd: number) => {
     if (!textareaEl) return
-
-    // Find the contiguous diff range between old and new text
-    let start = 0
-    const minLen = Math.min(content.length, newText.length)
-    while (start < minLen && content[start] === newText[start]) start++
-
-    let oldEnd = content.length
-    let newEnd = newText.length
-    while (oldEnd > start && newEnd > start && content[oldEnd - 1] === newText[newEnd - 1]) {
-      oldEnd--
-      newEnd--
-    }
-
-    // Apply change via execCommand so it lands on browser's native undo stack
-    textareaEl.focus()
-    textareaEl.selectionStart = start
-    textareaEl.selectionEnd = oldEnd
-    document.execCommand('insertText', false, newText.substring(start, newEnd))
-
-    // Restore cursor to where the operation says it should be
-    requestAnimationFrame(() => {
-      textareaEl.setSelectionRange(cursorStart, cursorEnd)
-    })
-
+    applyOperationToTextarea(textareaEl, content, newText, cursorStart, cursorEnd)
     setContextMenuState(null)
   }, [content, textareaEl])
 

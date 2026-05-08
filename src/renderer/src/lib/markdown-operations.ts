@@ -185,3 +185,31 @@ export async function copyToClipboard(text: string): Promise<void> {
 export async function pasteFromClipboard(): Promise<string> {
   return await navigator.clipboard.readText()
 }
+
+export function applyOperationToTextarea(
+  textarea: HTMLTextAreaElement,
+  oldText: string,
+  newText: string,
+  cursorStart: number,
+  cursorEnd: number,
+): void {
+  let start = 0
+  const minLen = Math.min(oldText.length, newText.length)
+  while (start < minLen && oldText[start] === newText[start]) start++
+
+  let oldEnd = oldText.length
+  let newEnd = newText.length
+  while (oldEnd > start && newEnd > start && oldText[oldEnd - 1] === newText[newEnd - 1]) {
+    oldEnd--
+    newEnd--
+  }
+
+  textarea.focus()
+  textarea.selectionStart = start
+  textarea.selectionEnd = oldEnd
+  document.execCommand('insertText', false, newText.substring(start, newEnd))
+
+  requestAnimationFrame(() => {
+    textarea.setSelectionRange(cursorStart, cursorEnd)
+  })
+}
