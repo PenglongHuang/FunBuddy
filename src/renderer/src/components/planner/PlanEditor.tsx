@@ -11,8 +11,12 @@ import TagInput from '@/components/common/TagInput'
 import { getAllTags } from '@/lib/tag-utils'
 import MarkdownContextMenu from '@/components/ui/MarkdownContextMenu'
 import useTextSelection from '@/hooks/useTextSelection'
-import { applyOperationToTextarea, createInsertImageWithPath } from '@/lib/markdown-operations'
+import { applyOperationToTextarea, createInsertImageWithPath, createInsertLinkRef } from '@/lib/markdown-operations'
+import { type LinkSearchResult } from '@/lib/link-resolver'
+import { useNoteStore } from '@/stores/noteStore'
+import { usePetStore } from '@/stores/petStore'
 import { imageApi, fs } from '@/lib/ipc'
+import LinkSuggestionPopup from '@/components/common/LinkSuggestionPopup'
 
 const AUTO_SAVE_DELAY = 3000
 
@@ -68,6 +72,10 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
   } | null>(null)
   const [textareaEl, setTextareaEl] = useState<HTMLTextAreaElement | null>(null)
   const selection = useTextSelection(textareaEl)
+  const [linkPopupState, setLinkPopupState] = useState<{
+    anchorRect: { x: number; y: number }
+    triggerStart: number
+  } | null>(null)
   const editorRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -160,6 +168,53 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
       selection: null,
     })
   }, [])
+
+  const handleTriggerLinkPopup = useCallback((triggerStart: number) => {
+    if (!textareaEl) return
+    const rect = textareaEl.getBoundingClientRect()
+    const lineHeight = 18
+    const textBefore = content.substring(0, triggerStart)
+    const lineCount = textBefore.split('\n').length - 1
+    setLinkPopupState({
+      anchorRect: {
+        x: rect.left + 10,
+        y: rect.top + Math.min(lineCount * lineHeight, rect.height - 50),
+      },
+      triggerStart,
+    })
+  }, [textareaEl, content])
+
+  const handleLinkSelect = useCallback((result: LinkSearchResult) => {
+    if (!linkPopupState || !textareaEl) return
+    const triggerStart = linkPopupState.triggerStart
+    const currentCursorPos = textareaEl.selectionStart
+    const cleanedText = content.substring(0, triggerStart) + content.substring(currentCursorPos)
+    const op = createInsertLinkRef(result.id, result.title)
+    const opResult = op(cleanedText, triggerStart, triggerStart)
+    applyOperationToTextarea(textareaEl, content, opResult.text, opResult.start, opResult.end)
+    setLinkPopupState(null)
+  }, [linkPopupState, textareaEl, content])
+
+  const handleLinkPopupClose = useCallback(() => {
+    if (!linkPopupState || !textareaEl) { setLinkPopupState(null); return }
+    const triggerStart = linkPopupState.triggerStart
+    const currentCursorPos = textareaEl.selectionStart
+    const triggerLen = currentCursorPos - triggerStart
+    if (triggerLen > 0 && triggerLen <= 2) {
+      const cleaned = content.substring(0, triggerStart) + content.substring(currentCursorPos)
+      applyOperationToTextarea(textareaEl, content, cleaned, triggerStart, triggerStart)
+    }
+    setLinkPopupState(null)
+  }, [linkPopupState, textareaEl, content])
+
+  const handleLinkClick = useCallback((id: string, type: string) => {
+    if (type === 'plan') {
+      setActivePlan(id)
+    } else if (type === 'note') {
+      useNoteStore.getState().setActiveNote(id)
+      usePetStore.getState().setActivePanel('notes')
+    }
+  }, [setActivePlan])
 
   if (!plan) return null
 
@@ -270,6 +325,7 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
             mdFilePath={plan.filePath}
             onInsertImageFromPicker={handleInsertImageFromPicker}
             showToast={showToast}
+            onTriggerLinkPopup={handleTriggerLinkPopup}
           />
         ) : (
           <div
@@ -277,7 +333,7 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
             style={{ userSelect: 'text' }}
             onContextMenu={handlePreviewContextMenu}
           >
-            <MarkdownPreview content={content} mdFilePath={plan.filePath} />
+            <MarkdownPreview content={content} mdFilePath={plan.filePath} onLinkClick={handleLinkClick} />
           </div>
         )}
       </div>
@@ -296,8 +352,18 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
           onApplyOperation={handleApplyOperation}
           previewContent={content}
           onInsertImage={handleInsertImageFromPicker}
+          onInsertLinkRef={() => handleTriggerLinkPopup(textareaEl?.selectionStart ?? 0)}
         />,
         document.body
+      )}
+
+      {linkPopupState && createPortal(
+        <LinkSuggestionPopup
+          anchorRect={linkPopupState.anchorRect}
+          onSelect={handleLinkSelect}
+          onClose={handleLinkPopupClose}
+        />,
+        document.body,
       )}
     </div>
   )
