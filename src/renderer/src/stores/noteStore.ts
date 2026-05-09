@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { nanoid } from 'nanoid'
-import { fs, store } from '@/lib/ipc'
+import { fs, store, imageApi } from '@/lib/ipc'
 import type { Note } from '@/types/note'
 
 
@@ -93,6 +93,7 @@ export const useNoteStore = create<NoteStore>()(
     deleteNote: async (id) => {
       const note = get().notes.find((n) => n.id === id)
       if (note) {
+        try { await imageApi.cleanup(note.filePath) } catch {}
         try { await fs.deleteFile(note.filePath) } catch {}
       }
       set((s) => { s.notes = s.notes.filter((n) => n.id !== id) })
@@ -104,6 +105,7 @@ export const useNoteStore = create<NoteStore>()(
       const notes = get().notes
       for (const note of notes) {
         if (idSet.has(note.id)) {
+          try { await imageApi.cleanup(note.filePath) } catch {}
           try { await fs.deleteFile(note.filePath) } catch { /* already deleted */ }
         }
       }

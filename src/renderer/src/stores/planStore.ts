@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { nanoid } from 'nanoid'
-import { fs, store } from '@/lib/ipc'
+import { fs, store, imageApi } from '@/lib/ipc'
 import type { Plan, PlanType } from '@/types/plan'
 
 const COLOR_MAP: Record<PlanType, string> = {
@@ -125,6 +125,7 @@ export const usePlanStore = create<PlanStore>()(
         const content = await fs.readFile(plan.filePath)
         await fs.writeFile(newFilePath, content)
         try { await fs.deleteFile(plan.filePath) } catch { /* ignore */ }
+        try { await imageApi.moveAssets(plan.filePath, newFilePath) } catch {}
       }
 
       set((s) => {
@@ -144,6 +145,7 @@ export const usePlanStore = create<PlanStore>()(
     deletePlan: async (id) => {
       const plan = get().plans.find((p) => p.id === id)
       if (plan) {
+        try { await imageApi.cleanup(plan.filePath) } catch {}
         try { await fs.deleteFile(plan.filePath) } catch { /* already deleted */ }
       }
       set((s) => { s.plans = s.plans.filter((p) => p.id !== id) })
@@ -155,6 +157,7 @@ export const usePlanStore = create<PlanStore>()(
       const plans = get().plans
       for (const plan of plans) {
         if (idSet.has(plan.id)) {
+          try { await imageApi.cleanup(plan.filePath) } catch {}
           try { await fs.deleteFile(plan.filePath) } catch { /* already deleted */ }
         }
       }
