@@ -1,11 +1,13 @@
 import { ipcMain, Notification, dialog, screen, app } from 'electron'
-import { readFile, writeFile, unlink, readdir, mkdir } from 'fs/promises'
+import { readFile, writeFile, unlink, readdir, mkdir, rm, cp } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join, dirname } from 'path'
+import { join, dirname, resolve, parse as parsePath } from 'path'
 import { getStore } from './store'
 import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode, startPetCursorTracking, stopPetCursorTracking, setPetDragging, movePetDrag, toggleAlwaysOnTop } from './window'
 import { IPC } from '../shared/ipc-channels'
 import { registerHotkeys } from './hotkey'
+import { nanoid } from 'nanoid'
+import sharp from 'sharp'
 
 export function registerIpcHandlers(): void {
   const store = getStore()
@@ -14,6 +16,27 @@ export function registerIpcHandlers(): void {
     const configured = store.get('settings.storageDir') as string
     if (configured) return configured
     return join(app.getPath('userData'), 'funbuddy-workspace')
+  }
+
+  const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
+  const IMAGE_MAX_SIZE = 10 * 1024 * 1024
+
+  const dataUrlCache = new Map<string, { dataUrl: string; mimeType: string }>()
+
+  function validatePath(dir: string, filePath: string): string {
+    const fullPath = resolve(dir, filePath)
+    if (!fullPath.startsWith(resolve(dir))) {
+      throw new Error('Invalid path')
+    }
+    return fullPath
+  }
+
+  function getAssetsInfo(mdFilePath: string): { dir: string; assetsDir: string; baseName: string } {
+    const dir = getStorageDir()
+    const mdFull = validatePath(dir, mdFilePath)
+    const mdDir = dirname(mdFull)
+    const { name } = parsePath(mdFull)
+    return { dir, assetsDir: join(mdDir, name, 'assets'), baseName: name }
   }
 
   // Store
@@ -273,6 +296,146 @@ export function registerIpcHandlers(): void {
       mainWin.webContents.once('dom-ready', send)
     } else {
       send()
+    }
+  })
+
+  // === Image handlers ===
+
+  ipcMain.handle(IPC.IMAGE_SAVE, async (_e, mdFilePath: string, imageData: ArrayBuffer, ext: string, _altName?: string) => {
+    if (!IMAGE_EXTENSIONS.includes(ext.toLowerCase())) {
+      throw new Error(`Unsupported image format: ${ext}`)
+    }
+
+    const { assetsDir, baseName } = getAssetsInfo(mdFilePath)
+    await mkdir(assetsDir, { recursive: true })
+
+    const buffer = Buffer.from(imageData)
+    if (buffer.length > IMAGE_MAX_SIZE) {
+      throw new Error('Image exceeds 10MB limit')
+    }
+
+    let format: string
+    try {
+      const meta = await sharp(buffer).metadata()
+      if (!meta.format) throw new Error('No format')
+      format = meta.format
+    } catch {
+      throw new Error('Invalid image data')
+    }
+
+    const actualExt = format === 'jpeg' ? 'jpg' : format
+    const fileName = `${nanoid(8)}.${actualExt}`
+    await writeFile(join(assetsDir, fileName), buffer)
+
+    const relativePath = `./${baseName}/assets/${fileName}`
+    return { relativePath, fileName }
+  })
+
+  ipcMain.handle(IPC.IMAGE_PICK_AND_SAVE, async (_e, mdFilePath: string) => {
+    const result = await withForegroundDialog(() =>
+      dialog.showOpenDialog({
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'Images', extensions: IMAGE_EXTENSIONS }],
+      })
+    )
+    if (result.canceled || result.filePaths.length === 0) return null
+
+    const { assetsDir, baseName } = getAssetsInfo(mdFilePath)
+    await mkdir(assetsDir, { recursive: true })
+
+    const saved = await Promise.all(result.filePaths.map(async (srcPath) => {
+      const ext = srcPath.split('.').pop()?.toLowerCase() || 'png'
+      const fileName = `${nanoid(8)}.${ext}`
+      await cp(srcPath, join(assetsDir, fileName))
+      return { relativePath: `./${baseName}/assets/${fileName}`, fileName }
+    }))
+
+    return saved[0]
+  })
+
+  ipcMain.handle(IPC.IMAGE_DELETE, async (_e, mdFilePath: string, imageFileName: string) => {
+    const { assetsDir } = getAssetsInfo(mdFilePath)
+    const fullPath = join(assetsDir, imageFileName)
+    if (!resolve(fullPath).startsWith(resolve(assetsDir))) {
+      throw new Error('Invalid image path')
+    }
+    try { await unlink(fullPath) } catch { /* already deleted */ }
+    for (const key of dataUrlCache.keys()) {
+      if (key.includes(imageFileName)) dataUrlCache.delete(key)
+    }
+  })
+
+  ipcMain.handle(IPC.IMAGE_CLEANUP, async (_e, mdFilePath: string) => {
+    const { dir } = getAssetsInfo(mdFilePath)
+    const mdFull = validatePath(dir, mdFilePath)
+    const mdDir = dirname(mdFull)
+    const { name } = parsePath(mdFull)
+    const noteDir = join(mdDir, name)
+    if (!resolve(noteDir).startsWith(resolve(mdDir))) {
+      throw new Error('Invalid path')
+    }
+    try { await rm(noteDir, { recursive: true, force: true }) } catch { /* ignore */ }
+    for (const key of dataUrlCache.keys()) {
+      if (key.startsWith(mdFilePath)) dataUrlCache.delete(key)
+    }
+  })
+
+  ipcMain.handle(IPC.IMAGE_READ_AS_DATA_URL, async (_e, mdFilePath: string, imageFileName: string, maxWidth?: number) => {
+    const cacheKey = `${mdFilePath}:${imageFileName}:${maxWidth || 0}`
+    const cached = dataUrlCache.get(cacheKey)
+    if (cached) return cached
+
+    const { assetsDir } = getAssetsInfo(mdFilePath)
+    const fullPath = join(assetsDir, imageFileName)
+    if (!resolve(fullPath).startsWith(resolve(assetsDir))) {
+      throw new Error('Invalid image path')
+    }
+
+    let buffer: Buffer
+    let mimeType: string
+
+    if (maxWidth && maxWidth > 0) {
+      const image = sharp(fullPath)
+      const meta = await image.metadata()
+      if (meta.width && meta.width > maxWidth) {
+        buffer = await image.resize(maxWidth).toBuffer()
+      } else {
+        buffer = await readFile(fullPath) as Buffer
+      }
+      const format = meta.format || 'png'
+      mimeType = `image/${format === 'jpg' ? 'jpeg' : format}`
+    } else {
+      buffer = await readFile(fullPath) as Buffer
+      const meta = await sharp(buffer).metadata()
+      const format = meta.format || 'png'
+      mimeType = `image/${format === 'jpg' ? 'jpeg' : format}`
+    }
+
+    const dataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`
+    const result = { dataUrl, mimeType }
+    dataUrlCache.set(cacheKey, result)
+    return result
+  })
+
+  ipcMain.handle(IPC.IMAGE_MOVE_ASSETS, async (_e, oldMdFilePath: string, newMdFilePath: string) => {
+    const dir = getStorageDir()
+    const oldMdFull = validatePath(dir, oldMdFilePath)
+    const newMdFull = validatePath(dir, newMdFilePath)
+    const { name: oldBase } = parsePath(oldMdFull)
+    const { name: newBase } = parsePath(newMdFull)
+    const oldDir = join(dirname(oldMdFull), oldBase)
+    const newDir = join(dirname(newMdFull), newBase)
+    try {
+      await mkdir(dirname(newDir), { recursive: true })
+      await cp(oldDir, newDir, { recursive: true })
+      await rm(oldDir, { recursive: true, force: true })
+    } catch { /* no assets to move */ }
+    for (const key of dataUrlCache.keys()) {
+      if (key.startsWith(oldMdFilePath)) {
+        const newKey = key.replace(oldMdFilePath, newMdFilePath)
+        dataUrlCache.set(newKey, dataUrlCache.get(key)!)
+        dataUrlCache.delete(key)
+      }
     }
   })
 }
