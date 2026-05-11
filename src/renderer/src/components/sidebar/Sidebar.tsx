@@ -1,13 +1,13 @@
 import PanelRouter from './PanelRouter'
 import IconStrip from './IconStrip'
 import TitleBar from './TitleBar'
+import AiSearchOverlay from './AiSearchOverlay'
 import { usePetStore } from '@/stores/petStore'
 import { windowApi } from '@/lib/ipc'
 import GlobalToast from '@/components/common/GlobalToast'
 
 export default function Sidebar() {
   const activePanel = usePetStore((s) => s.activePanel)
-  const setActivePanel = usePetStore((s) => s.setActivePanel)
 
   return (
     <div
@@ -24,24 +24,19 @@ export default function Sidebar() {
       {/* Title bar */}
       <TitleBar />
 
+      {/* AI search overlay */}
+      <AiSearchOverlay />
+
       {/* Content area: PanelRouter + IconStrip */}
       <div className="flex flex-1 min-h-0">
-        {/* Left: Panel content */}
         <PanelRouter activePanel={activePanel} />
-
-        {/* Divider */}
         <div style={{ width: 1, background: 'var(--separator)', flexShrink: 0 }} />
-
-        {/* Right: icon rail (no pet avatar, no close button) */}
         <div
           className="w-[72px] shrink-0 flex flex-col items-center py-3"
-          style={{
-            background: 'rgba(255,255,255,0.03)',
-          }}
+          style={{ background: 'rgba(255,255,255,0.03)' }}
           onDoubleClick={() => windowApi.restoreDefault()}
         >
-          {/* Nav only */}
-          <IconStrip activePanel={activePanel} onToggle={setActivePanel} />
+          <IconStrip activePanel={activePanel} />
         </div>
       </div>
 

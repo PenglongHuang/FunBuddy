@@ -6,6 +6,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { motion } from 'motion/react'
+import { useNavigationStore } from '@/stores/navigationStore'
 
 const NAV_ITEMS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'planner', label: '计划', icon: CalendarDays },
@@ -16,10 +17,11 @@ const NAV_ITEMS: { id: string; label: string; icon: LucideIcon }[] = [
 
 interface IconStripProps {
   activePanel: string
-  onToggle: (panel: 'planner' | 'timer' | 'notes' | 'settings') => void
 }
 
-export default function IconStrip({ activePanel, onToggle }: IconStripProps) {
+export default function IconStrip({ activePanel }: IconStripProps) {
+  const navPush = useNavigationStore((s) => s.push)
+
   return (
     <div className="flex flex-col items-center gap-1">
       {NAV_ITEMS.map((item) => {
@@ -29,7 +31,12 @@ export default function IconStrip({ activePanel, onToggle }: IconStripProps) {
         return (
           <motion.button
             key={item.id}
-            onClick={() => onToggle(item.id as any)}
+            onClick={() => {
+              const id = item.id
+              if (id === 'planner') navPush({ panel: 'planner', subView: 'list' })
+              else if (id === 'notes') navPush({ panel: 'notes', subView: 'list' })
+              else navPush({ panel: id as any })
+            }}
             title={item.label}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.92 }}
