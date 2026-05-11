@@ -98,8 +98,8 @@ async function resolveImages(content: string, mdFilePath: string): Promise<Recor
   await Promise.all(
     uniqueRefs.map(async (ref) => {
       try {
-        const dataUrl = await imageApi.readAsDataUrl(mdFilePath, ref)
-        if (dataUrl) imageMap[ref] = dataUrl
+        const result = await imageApi.readAsDataUrl(mdFilePath, ref)
+        if (result?.dataUrl) imageMap[ref] = result.dataUrl
       } catch {
         // skip failed images
       }

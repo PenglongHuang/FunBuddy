@@ -260,7 +260,9 @@ export function registerIpcHandlers(): void {
       try {
         win = new BrowserWindow({ width: 800, height: 1200, show: false, webPreferences: { offscreen: true } })
         await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
-        await new Promise((r) => setTimeout(r, 500))
+        await new Promise<void>((resolve) => {
+          win!.webContents.once('did-finish-load', () => setTimeout(resolve, 500))
+        })
 
         const pdfBytes = await win.webContents.printToPDF({
           pageSize: 'A4',
