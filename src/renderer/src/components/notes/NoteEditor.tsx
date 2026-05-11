@@ -6,7 +6,7 @@ import MarkdownEditor from '@/components/common/MarkdownEditor'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
 import SplitPaneLiveEditor from '@/components/common/SplitPaneLiveEditor'
 import TableOfContents from '@/components/common/TableOfContents'
-import { ArrowLeft, Pencil, Eye, Zap, List } from 'lucide-react'
+import { ArrowLeft, Pencil, Eye, Zap, List, Download, MoreVertical } from 'lucide-react'
 import TagInput from '@/components/common/TagInput'
 import { getAllTags } from '@/lib/tag-utils'
 import { motion } from 'motion/react'
@@ -19,6 +19,11 @@ import { applyOperationToTextarea, createInsertImageWithPath, createInsertLinkRe
 import { type LinkSearchResult } from '@/lib/link-resolver'
 import { imageApi, fs } from '@/lib/ipc'
 import LinkSuggestionPopup from '@/components/common/LinkSuggestionPopup'
+import ContextMenu from '@/components/ui/ContextMenu'
+import ExportDialog from '@/components/common/ExportDialog'
+import { buildExportHtml, type ExportMode } from '@/lib/export-pdf'
+import { pdfExport } from '@/lib/ipc'
+import { useToastStore } from '@/stores/toastStore'
 
 const AUTO_SAVE_DELAY = 3000
 
@@ -109,6 +114,9 @@ export default function NoteEditor() {
     anchorRect: { x: number; y: number }
     triggerStart: number
   } | null>(null)
+
+  const [editorContextMenu, setEditorContextMenu] = useState<DOMRect | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
 
   const { showToast, ToastContainer } = useToast()
 
@@ -384,6 +392,34 @@ export default function NoteEditor() {
     })
   }, [])
 
+  const handleExport = async (mode: ExportMode) => {
+    if (!note) return
+    try {
+      const content = await loadNoteContent(activeNoteId!)
+      const html = await buildExportHtml({
+        content: content || '',
+        mdFilePath: note.filePath,
+        title: note.title,
+        mode,
+        fileName: `${note.title}.pdf`,
+        meta: {
+          tags: note.tags,
+          createdAt: note.createdAt?.slice(0, 10),
+        },
+      })
+      const result = await pdfExport.generate(html, `${note.title}.pdf`)
+      setExportOpen(false)
+      if (result.success && 'filePath' in result) {
+        useToastStore.getState().show('PDF 导出成功')
+      } else if (!result.success) {
+        useToastStore.getState().show('导出失败: ' + result.error)
+      }
+    } catch (err: any) {
+      setExportOpen(false)
+      useToastStore.getState().show('导出失败: ' + (err.message || String(err)))
+    }
+  }
+
   return (
     <div ref={rootRef} className="flex flex-col h-full gap-3" style={{ position: 'relative' }}>
       <ToastContainer />
@@ -467,6 +503,13 @@ export default function NoteEditor() {
             </motion.button>
           ))}
         </div>
+
+        <button
+          onClick={(e) => setEditorContextMenu(e.currentTarget.getBoundingClientRect())}
+          style={{ background: 'transparent', border: 'none', color: 'var(--text-quaternary)', padding: 4, borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
+        >
+          <MoreVertical size={14} />
+        </button>
       </div>
 
       {/* Tags */}
@@ -556,6 +599,24 @@ export default function NoteEditor() {
         />,
         document.body,
       )}
+
+      {editorContextMenu && (
+        <ContextMenu
+          items={[
+            {
+              label: '导出 PDF',
+              icon: <Download size={13} />,
+              onClick: () => {
+                setExportOpen(true)
+                setEditorContextMenu(null)
+              },
+            },
+          ]}
+          anchorRect={editorContextMenu}
+          onClose={() => setEditorContextMenu(null)}
+        />
+      )}
+      {exportOpen && <ExportDialog open onClose={() => setExportOpen(false)} onExport={handleExport} />}
     </div>
   )
 }
