@@ -13,8 +13,7 @@ import MarkdownContextMenu from '@/components/ui/MarkdownContextMenu'
 import useTextSelection from '@/hooks/useTextSelection'
 import { applyOperationToTextarea, createInsertImageWithPath, createInsertLinkRef } from '@/lib/markdown-operations'
 import { type LinkSearchResult } from '@/lib/link-resolver'
-import { useNoteStore } from '@/stores/noteStore'
-import { usePetStore } from '@/stores/petStore'
+import { useNavigationStore } from '@/stores/navigationStore'
 import { imageApi, fs } from '@/lib/ipc'
 import LinkSuggestionPopup from '@/components/common/LinkSuggestionPopup'
 
@@ -50,9 +49,9 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
   const loadPlanContent = usePlanStore((s) => s.loadPlanContent)
   const savePlanContent = usePlanStore((s) => s.savePlanContent)
   const updatePlan = usePlanStore((s) => s.updatePlan)
-  const setActivePlan = usePlanStore((s) => s.setActivePlan)
   const updatePlanTags = usePlanStore((s) => s.updatePlanTags)
   const plans = usePlanStore((s) => s.plans)
+  const navPush = useNavigationStore((s) => s.push)
 
   const [content, setContent] = useState('')
   const [editMode, setEditMode] = useState<'edit' | 'preview'>('edit')
@@ -115,16 +114,19 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
     showToast(isAuto ? '自动保存成功' : '保存成功')
   }, [plan, savePlanContent, updatePlan, showToast])
 
+  const doSaveRef = useRef(doSave)
+  doSaveRef.current = doSave
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
-        doSave(false)
+        doSaveRef.current(false)
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [doSave])
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -209,12 +211,11 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
 
   const handleLinkClick = useCallback((id: string, type: string) => {
     if (type === 'plan') {
-      setActivePlan(id)
+      navPush({ panel: 'planner', subView: 'editor', planId: id })
     } else if (type === 'note') {
-      useNoteStore.getState().setActiveNote(id)
-      usePetStore.getState().setActivePanel('notes')
+      navPush({ panel: 'notes', subView: 'editor', noteId: id })
     }
-  }, [setActivePlan])
+  }, [navPush])
 
   // Close link popup when trigger chars are deleted
   useEffect(() => {
@@ -263,7 +264,7 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
       {/* Toolbar */}
       <div className="flex items-center gap-3">
         <motion.button
-          onClick={() => setActivePlan(null)}
+          onClick={() => navPush({ panel: 'planner', subView: 'list' })}
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.92 }}
           style={{

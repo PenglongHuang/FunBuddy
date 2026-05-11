@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { motion } from 'motion/react'
 import { usePlanStore } from '@/stores/planStore'
+import { useNavigationStore } from '@/stores/navigationStore'
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
 
@@ -21,7 +22,7 @@ interface CalendarViewProps {
 export default function CalendarView({ onSwitchView }: CalendarViewProps) {
   const plans = usePlanStore((s) => s.plans)
   const getPlansForDate = usePlanStore((s) => s.getPlansForDate)
-  const setActivePlan = usePlanStore((s) => s.setActivePlan)
+  const navPush = useNavigationStore((s) => s.push)
   const today = new Date()
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
@@ -218,7 +219,7 @@ export default function CalendarView({ onSwitchView }: CalendarViewProps) {
           {datePlans.map((p) => (
             <div
               key={p.id}
-              onClick={() => setActivePlan(p.id)}
+              onClick={() => navPush({ panel: 'planner', subView: 'editor', planId: p.id })}
               style={{
                 display: 'flex',
                 alignItems: 'center',
