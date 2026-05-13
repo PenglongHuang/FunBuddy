@@ -60,6 +60,7 @@ interface PlanStore {
   updatePlanTags: (id: string, tags: string[]) => Promise<void>
   renameTag: (oldName: string, newName: string) => Promise<void>
   deleteTag: (tagName: string) => Promise<void>
+  duplicatePlan: (id: string) => Promise<Plan>
   setSortBy: (sort: 'time' | 'name' | 'planDate') => void
   setViewMode: (mode: 'card' | 'compact') => void
 }
@@ -227,6 +228,13 @@ export const usePlanStore = create<PlanStore>()(
         }
       })
       await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
+    },
+
+    duplicatePlan: async (id) => {
+      const plan = get().plans.find((p) => p.id === id)
+      if (!plan) throw new Error(`Plan ${id} not found`)
+      const content = await get().loadPlanContent(id)
+      return get().createPlan('复制 ' + plan.title, plan.startDate, plan.endDate, plan.planType, content)
     },
 
     setSortBy: (sort) => {
