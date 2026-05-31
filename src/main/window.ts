@@ -202,7 +202,8 @@ let dragState: {
   cursorStartY: number
 } | null = null
 
-const HIT_RADIUS = 45
+const HIT_RADIUS_IDLE = 45
+const HIT_RADIUS_HOVERED = 95
 
 export function startPetCursorTracking(win: BrowserWindow): void {
   stopPetCursorTracking()
@@ -222,7 +223,8 @@ export function startPetCursorTracking(win: BrowserWindow): void {
     const petCy = bounds.y + bounds.height / 2
     const dx = cursor.x - petCx
     const dy = cursor.y - petCy
-    const inside = dx * dx + dy * dy <= HIT_RADIUS * HIT_RADIUS
+    const hitRadius = trackingHovering ? HIT_RADIUS_HOVERED : HIT_RADIUS_IDLE
+    const inside = dx * dx + dy * dy <= hitRadius * hitRadius
 
     if (inside && !trackingHovering) {
       trackingHovering = true

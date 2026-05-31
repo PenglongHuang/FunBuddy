@@ -7,6 +7,7 @@ import {
   createInsertImageWithPath,
 } from '@/lib/markdown-operations'
 import type { MarkdownOperation } from '@/lib/markdown-operations'
+import { maskCodeBlocks } from '@/lib/link-parser'
 import { imageApi } from '@/lib/ipc'
 
 interface ShortcutDef {
@@ -153,6 +154,12 @@ export default function MarkdownEditor({ value, onChange, placeholder, onCursorL
 
     const cursorPos = ta.selectionStart
     if (cursorPos < 1) { onChange(newValue); return }
+
+    const { masked } = maskCodeBlocks(newValue)
+    if (masked[cursorPos - 1] === '\x00') {
+      onChange(newValue)
+      return
+    }
 
     const charBefore = newValue[cursorPos - 1]
     const charBefore2 = cursorPos >= 2 ? newValue[cursorPos - 2] : ''

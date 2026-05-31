@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useNoteStore } from '@/stores/noteStore'
+import { useNavigationStore } from '@/stores/navigationStore'
 import MarkdownEditor from '@/components/common/MarkdownEditor'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
 import SplitPaneLiveEditor from '@/components/common/SplitPaneLiveEditor'
 import TableOfContents from '@/components/common/TableOfContents'
-import { ArrowLeft, Pencil, Eye, Zap, List } from 'lucide-react'
+import { ArrowLeft, Pencil, Eye, Zap, List, Download, MoreVertical } from 'lucide-react'
 import TagInput from '@/components/common/TagInput'
 import { getAllTags } from '@/lib/tag-utils'
 import { motion } from 'motion/react'
@@ -16,33 +17,13 @@ import MarkdownContextMenu from '@/components/ui/MarkdownContextMenu'
 import useTextSelection from '@/hooks/useTextSelection'
 import { applyOperationToTextarea, createInsertImageWithPath, createInsertLinkRef } from '@/lib/markdown-operations'
 import { type LinkSearchResult } from '@/lib/link-resolver'
-import { imageApi, fs } from '@/lib/ipc'
+import { imageApi } from '@/lib/ipc'
 import LinkSuggestionPopup from '@/components/common/LinkSuggestionPopup'
-import { usePlanStore } from '@/stores/planStore'
-import { usePetStore } from '@/stores/petStore'
-
-const AUTO_SAVE_DELAY = 3000
-
-const IMAGE_REF_REGEX = /!\[[^\]]*\]\([^)]*\/assets\/([^)]+)\)/g
-
-async function cleanupOrphanImages(mdFilePath: string, content: string): Promise<void> {
-  const refs = new Set<string>()
-  let match
-  while ((match = IMAGE_REF_REGEX.exec(content)) !== null) {
-    if (match[1]) refs.add(match[1])
-  }
-  if (refs.size === 0) return
-  try {
-    const dir = mdFilePath.replace(/\.md$/, '')
-    const assetsPath = `${dir}/assets`
-    const files = await fs.readDir(assetsPath)
-    for (const file of files) {
-      if (!refs.has(file)) {
-        await imageApi.deleteImage(mdFilePath, file)
-      }
-    }
-  } catch { /* no assets dir */ }
-}
+import ContextMenu from '@/components/ui/ContextMenu'
+import ExportDialog from '@/components/common/ExportDialog'
+import { buildExportHtml, type ExportMode } from '@/lib/export-pdf'
+import { pdfExport } from '@/lib/ipc'
+import { useToastStore } from '@/stores/toastStore'
 
 function findScrollParent(el: HTMLElement): HTMLElement | null {
   let parent = el.parentElement
@@ -74,8 +55,8 @@ export default function NoteEditor() {
   const saveNoteContent = useNoteStore((s) => s.saveNoteContent)
   const updateNoteTitle = useNoteStore((s) => s.updateNoteTitle)
   const updateNoteTags = useNoteStore((s) => s.updateNoteTags)
-  const setActiveNote = useNoteStore((s) => s.setActiveNote)
   const notes = useNoteStore((s) => s.notes)
+  const navPush = useNavigationStore((s) => s.push)
 
   const allTags = useMemo(() => getAllTags(notes), [notes])
 
@@ -88,12 +69,10 @@ export default function NoteEditor() {
   const [tocVisible, setTocVisible] = useState(false)
   const [currentLineIndex, setCurrentLineIndex] = useState<number | null>(0)
   const [dirty, setDirty] = useState(false)
-  const autoSaveTimer = useRef<ReturnType<typeof setTimeout>>(null)
   const contentRef = useRef(content)
   contentRef.current = content
   const dirtyRef = useRef(false)
   dirtyRef.current = dirty
-  const prevImageRefsRef = useRef<Set<string>>(new Set())
   const toggleTocRef = useRef<() => void>(() => {})
   const editorRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -111,6 +90,9 @@ export default function NoteEditor() {
     triggerStart: number
   } | null>(null)
 
+  const [editorContextMenu, setEditorContextMenu] = useState<DOMRect | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
+
   const { showToast, ToastContainer } = useToast()
 
   useEffect(() => {
@@ -122,7 +104,7 @@ export default function NoteEditor() {
     }
   }, [activeNoteId, loadNoteContent])
 
-  const doSave = useCallback(async (isAuto: boolean) => {
+  const doSave = useCallback(async () => {
     if (!note) return
     await saveNoteContent(note.id, contentRef.current)
 
@@ -131,40 +113,28 @@ export default function NoteEditor() {
       await updateNoteTitle(note.id, h1)
     }
 
-    // Orphan image cleanup — only when image refs changed
-    const currentRefs = new Set<string>()
-    let match
-    while ((match = IMAGE_REF_REGEX.exec(contentRef.current)) !== null) {
-      if (match[1]) currentRefs.add(match[1])
-    }
-    if (currentRefs.size > 0 || prevImageRefsRef.current.size > 0) {
-      if (currentRefs.size !== prevImageRefsRef.current.size ||
-          [...currentRefs].some(r => !prevImageRefsRef.current.has(r))) {
-        await cleanupOrphanImages(note.filePath, contentRef.current)
-      }
-    }
-    prevImageRefsRef.current = currentRefs
-
     setDirty(false)
-    showToast(isAuto ? '自动保存成功' : '保存成功')
+    showToast('保存成功')
   }, [note, saveNoteContent, updateNoteTitle, showToast])
+
+  const doSaveRef = useRef(doSave)
+  doSaveRef.current = doSave
 
   // Ctrl+S handler
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
-        doSave(false)
+        doSaveRef.current()
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [doSave])
+  }, [])
 
   // Cleanup: save dirty content on unmount
   useEffect(() => {
     return () => {
-      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
       if (dirtyRef.current) {
         const store = useNoteStore.getState()
         const { activeNoteId } = store
@@ -239,28 +209,86 @@ export default function NoteEditor() {
   }, [linkPopupState, textareaEl, content])
 
   const handleLinkClick = useCallback((id: string, type: string) => {
-    if (type === 'note') {
-      setActiveNote(id)
-    } else if (type === 'plan') {
-      usePlanStore.getState().setActivePlan(id)
-      usePetStore.getState().setActivePanel('planner')
+    if (type === 'deleted') {
+      showToast('链接指向的内容已被删除')
+      return
     }
-  }, [setActiveNote])
+    if (type === 'note') {
+      navPush({ panel: 'notes', subView: 'editor', noteId: id })
+    } else if (type === 'plan') {
+      navPush({ panel: 'planner', subView: 'editor', planId: id })
+    }
+  }, [navPush, showToast])
 
-  if (!note) return null
+  // Close link popup when trigger chars are deleted
+  useEffect(() => {
+    if (!linkPopupState) return
+    const start = linkPopupState.triggerStart
+    const firstChar = content[start]
+    const twoChars = content.substring(start, start + 2)
+    if (firstChar !== '@' && twoChars !== '[[') {
+      setLinkPopupState(null)
+    }
+  }, [content, linkPopupState])
 
   const handleChange = useCallback((newContent: string) => {
     setContent(newContent)
     setDirty(true)
-
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
-    autoSaveTimer.current = setTimeout(() => doSave(true), AUTO_SAVE_DELAY)
-  }, [doSave])
+  }, [])
 
   const toggleToc = () => {
     setTocVisible(!tocVisible)
   }
   toggleTocRef.current = toggleToc
+
+  const handleEditorContextMenu = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    e.preventDefault()
+    const ta = e.currentTarget
+    setContextMenuState({
+      anchorRect: DOMRect.fromRect({ width: 0, height: 0, x: e.clientX, y: e.clientY }),
+      mode,
+      selection: { start: ta.selectionStart, end: ta.selectionEnd },
+    })
+  }, [mode])
+
+  const handleApplyOperation = useCallback((newText: string, cursorStart: number, cursorEnd: number) => {
+    if (!textareaEl) return
+    applyOperationToTextarea(textareaEl, content, newText, cursorStart, cursorEnd)
+    setContextMenuState(null)
+  }, [content, textareaEl])
+
+  const handleInsertImageFromPicker = useCallback(async () => {
+    if (!note || !textareaEl) return
+    try {
+      const result = await imageApi.pickAndSave(note.filePath)
+      if (!result) return
+      const op = createInsertImageWithPath(result.relativePath, result.fileName)
+      const res = op(content, textareaEl.selectionStart, textareaEl.selectionEnd)
+      applyOperationToTextarea(textareaEl, content, res.text, res.start, res.end)
+    } catch {
+      showToast('保存图片失败')
+    }
+  }, [note, content, textareaEl, showToast])
+
+  const handlePreviewContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setContextMenuState({
+      anchorRect: DOMRect.fromRect({ width: 0, height: 0, x: e.clientX, y: e.clientY }),
+      mode: 'preview',
+      selection: null,
+    })
+  }, [])
+
+  const handleLivePreviewContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setContextMenuState({
+      anchorRect: DOMRect.fromRect({ width: 0, height: 0, x: e.clientX, y: e.clientY }),
+      mode: 'preview',
+      selection: null,
+    })
+  }, [])
+
+  if (!note) return null
 
   const handleHeadingClick = (lineIndex: number) => {
     setCurrentLineIndex(lineIndex)
@@ -325,55 +353,36 @@ export default function NoteEditor() {
     }
   }
 
-  const handleEditorContextMenu = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
-    e.preventDefault()
-    const ta = e.currentTarget
-    setContextMenuState({
-      anchorRect: DOMRect.fromRect({ width: 0, height: 0, x: e.clientX, y: e.clientY }),
-      mode,
-      selection: { start: ta.selectionStart, end: ta.selectionEnd },
-    })
-  }, [mode])
-
-  const handleApplyOperation = useCallback((newText: string, cursorStart: number, cursorEnd: number) => {
-    if (!textareaEl) return
-    applyOperationToTextarea(textareaEl, content, newText, cursorStart, cursorEnd)
-    setContextMenuState(null)
-  }, [content, textareaEl])
-
-  const handleInsertImageFromPicker = useCallback(async () => {
-    if (!note || !textareaEl) return
+  const handleExport = async (exportMode: ExportMode) => {
+    if (!note) return
     try {
-      const result = await imageApi.pickAndSave(note.filePath)
-      if (!result) return
-      const op = createInsertImageWithPath(result.relativePath, result.fileName)
-      const res = op(content, textareaEl.selectionStart, textareaEl.selectionEnd)
-      applyOperationToTextarea(textareaEl, content, res.text, res.start, res.end)
-    } catch {
-      showToast('保存图片失败')
+      const loadedContent = await loadNoteContent(activeNoteId!)
+      const html = await buildExportHtml({
+        content: loadedContent || '',
+        mdFilePath: note.filePath,
+        title: note.title,
+        mode: exportMode,
+        fileName: `${note.title}.pdf`,
+        meta: {
+          tags: note.tags,
+          createdAt: note.createdAt?.slice(0, 10),
+        },
+      })
+      const result = await pdfExport.generate(html, `${note.title}.pdf`)
+      setExportOpen(false)
+      if (result.success && 'filePath' in result) {
+        useToastStore.getState().show('PDF 导出成功')
+      } else if (!result.success) {
+        useToastStore.getState().show('导出失败: ' + result.error)
+      }
+    } catch (err: any) {
+      setExportOpen(false)
+      useToastStore.getState().show('导出失败: ' + (err.message || String(err)))
     }
-  }, [note, content, textareaEl, showToast])
-
-  const handlePreviewContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    setContextMenuState({
-      anchorRect: DOMRect.fromRect({ width: 0, height: 0, x: e.clientX, y: e.clientY }),
-      mode: 'preview',
-      selection: null,
-    })
-  }, [])
-
-  const handleLivePreviewContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    setContextMenuState({
-      anchorRect: DOMRect.fromRect({ width: 0, height: 0, x: e.clientX, y: e.clientY }),
-      mode: 'preview',
-      selection: null,
-    })
-  }, [])
+  }
 
   return (
-    <div ref={rootRef} className="flex flex-col h-full gap-3" style={{ position: 'relative' }}>
+    <div ref={rootRef} className="flex flex-col h-full gap-3" style={{ position: 'relative', paddingTop: 8 }}>
       <ToastContainer />
 
       {/* Toolbar */}
@@ -383,7 +392,8 @@ export default function NoteEditor() {
             if (tocVisible) {
               setTocVisible(false)
             }
-            setActiveNote(null)
+            useNoteStore.getState().deactivateTab()
+            navPush({ panel: 'notes', subView: 'list' })
           }}
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.92 }}
@@ -455,6 +465,13 @@ export default function NoteEditor() {
             </motion.button>
           ))}
         </div>
+
+        <button
+          onClick={(e) => { e.stopPropagation(); setEditorContextMenu(e.currentTarget.getBoundingClientRect()) }}
+          style={{ background: 'transparent', border: 'none', color: 'var(--text-quaternary)', padding: 4, borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
+        >
+          <MoreVertical size={14} />
+        </button>
       </div>
 
       {/* Tags */}
@@ -544,6 +561,24 @@ export default function NoteEditor() {
         />,
         document.body,
       )}
+
+      {editorContextMenu && (
+        <ContextMenu
+          items={[
+            {
+              label: '导出 PDF',
+              icon: <Download size={13} />,
+              onClick: () => {
+                setExportOpen(true)
+                setEditorContextMenu(null)
+              },
+            },
+          ]}
+          anchorRect={editorContextMenu}
+          onClose={() => setEditorContextMenu(null)}
+        />
+      )}
+      {exportOpen && <ExportDialog open onClose={() => setExportOpen(false)} onExport={handleExport} />}
     </div>
   )
 }

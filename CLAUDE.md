@@ -1,65 +1,65 @@
 # CLAUDE.md
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+旨在减少大语言模型常见编码错误的行为指南。可酌情与项目专属指令合并。
 
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+**权衡：** 本指南宁求稳妥，不图快速。若任务微不足道，请自行裁断。
 
-## 1. Think Before Coding
+## 1. 先思而后码
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+**莫臆断。莫藏惑。将权衡摆上台面。**
 
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+动手之前：
+- 明确陈述你的假设。若无把握，提问。
+- 若有多种解读，悉数呈现——切勿默然择一。
+- 若有更简方案，坦言相告。必要时据理力争。
+- 若遇不明之处，停步。指明所惑，然后发问。
 
-## 2. Simplicity First
+## 2. 简洁至上
 
-**Minimum code that solves the problem. Nothing speculative.**
+**以最少代码解决问题。杜绝臆测。**
 
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
+- 不求所提需求之外的功能。
+- 不为仅用一次的代码构筑抽象。
+- 不添未获要求的“灵活性”或“可配置性”。
+- 不为绝无可能之情景编写错误处理。
+- 若写了200行而50行足矣，推倒重来。
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+扪心自问：“资深工程师会嫌它过度复杂吗？”若是，化简。
 
-## 3. Surgical Changes
+## 3. 手术刀式修改
 
-**Touch only what you must. Clean up only your own mess.**
+**只碰必须碰的。只收拾自己弄乱的摊子。**
 
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
+编辑既有代码时：
+- 不“改良”相邻的代码、注释或格式。
+- 不重构未坏之处。
+- 遵循现有风格，哪怕你另有做法。
+- 若瞥见不相干的死代码，提出来——勿自行删除。
 
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
+当你的改动造成孤悬之物：
+- 移除因你改动而不再使用的导入、变量、函数。
+- 除非要求，否则别动本就存在的死代码。
 
-The test: Every changed line should trace directly to the user's request.
+检验标准：每一处改动行，都应能直接溯源至用户诉求。
 
-## 4. Goal-Driven Execution
+## 4. 目标驱动执行
 
-**Define success criteria. Loop until verified.**
+**定义成功准则。循环往复，直至验证通过。**
 
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
+将任务转化为可验证的目标：
+- “加验证” → “为无效输入编写测试，再使其通过”
+- “修缺陷” → “编写复现该缺陷的测试，再使其通过”
+- “重构X” → “确保重构前后测试均通过”
 
-For multi-step tasks, state a brief plan:
+多步骤任务，先陈明扼要计划：
 ```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
+1. [步骤] → 验证: [查验点]
+2. [步骤] → 验证: [查验点]
+3. [步骤] → 验证: [查验点]
 ```
 
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+强力的成功准则让你能独立迭代。虚弱的标准（“把它弄好就行”）只会招致不断的追问。
 
 ---
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+**这些准则见效之征：** 差异中不必要的修改变少，因过度复杂而推倒重来的次数下降，澄清性的提问出现在动手之前，而非捅出娄子之后。

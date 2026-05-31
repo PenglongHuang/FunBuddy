@@ -1,15 +1,17 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { motion } from 'motion/react'
 import { useTimerStore } from '@/stores/timerStore'
 import { usePlanStore } from '@/stores/planStore'
+import { useToastStore } from '@/stores/toastStore'
+import ContextMenu from '@/components/ui/ContextMenu'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import FocusRecordEditDialog from './FocusRecordEditDialog'
 import type { TimerHistoryEntry } from '@/types/timer'
 
 type TabKey = 'today' | 'week' | 'calendar'
 
 export default function TimerHistoryPanel() {
   const history = useTimerStore((s) => s.history)
-  const todayCount = useTimerStore((s) => s.todayCount)
-  const todayMinutes = useTimerStore((s) => s.todayMinutes)
   const plans = usePlanStore((s) => s.plans)
 
   const [activeTab, setActiveTab] = useState<TabKey>('today')
@@ -20,15 +22,56 @@ export default function TimerHistoryPanel() {
     [history, today]
   )
 
-  const resolvePlan = (planId: string | undefined) => {
+  const resolvePlan = useCallback((planId: string | undefined) => {
     if (!planId) return null
     return plans.find((p) => p.id === planId) ?? null
-  }
+  }, [plans])
 
-  const formatTime = (isoStr: string) => {
+  const formatTime = useCallback((isoStr: string) => {
     const d = new Date(isoStr)
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-  }
+  }, [])
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ entryId: string; anchorRect: DOMRect } | null>(null)
+  const [editTarget, setEditTarget] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+
+  const handleMoreClick = useCallback((entryId: string, anchorRect: DOMRect) => {
+    setContextMenu({ entryId, anchorRect })
+  }, [])
+
+  const handleEdit = useCallback(() => {
+    if (contextMenu) {
+      setEditTarget(contextMenu.entryId)
+      setContextMenu(null)
+    }
+  }, [contextMenu])
+
+  const handleDeleteRequest = useCallback(() => {
+    if (contextMenu) {
+      setDeleteTarget(contextMenu.entryId)
+      setContextMenu(null)
+    }
+  }, [contextMenu])
+
+  const handleEditConfirm = useCallback((updates: { completedAt?: string; durationMinutes?: number; planId?: string | null }) => {
+    if (editTarget) {
+      useTimerStore.getState().updateHistoryEntry(editTarget, updates)
+      useToastStore.getState().show('记录已更新')
+      setEditTarget(null)
+    }
+  }, [editTarget])
+
+  const handleDeleteConfirm = useCallback(() => {
+    if (deleteTarget) {
+      useTimerStore.getState().deleteHistoryEntry(deleteTarget)
+      useToastStore.getState().show('记录已删除')
+      setDeleteTarget(null)
+    }
+  }, [deleteTarget])
+
+  const editEntry = editTarget ? history.find((h) => h.id === editTarget) : null
 
   const tabs: Array<{ key: TabKey; label: string }> = [
     { key: 'today', label: '今天' },
@@ -60,50 +103,115 @@ export default function TimerHistoryPanel() {
       </div>
 
       {activeTab === 'today' && (
-        <TodayView entries={todayEntries} resolvePlan={resolvePlan} formatTime={formatTime} />
+        <TodayView entries={todayEntries} resolvePlan={resolvePlan} formatTime={formatTime} onMoreClick={handleMoreClick} />
       )}
       {activeTab === 'week' && (
-        <WeekView entries={history} resolvePlan={resolvePlan} formatTime={formatTime} />
+        <WeekView entries={history} resolvePlan={resolvePlan} formatTime={formatTime} onMoreClick={handleMoreClick} />
       )}
       {activeTab === 'calendar' && (
-        <CalendarView entries={history} resolvePlan={resolvePlan} formatTime={formatTime} />
+        <CalendarView entries={history} resolvePlan={resolvePlan} formatTime={formatTime} onMoreClick={handleMoreClick} />
       )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <ContextMenu
+          anchorRect={contextMenu.anchorRect}
+          onClose={() => setContextMenu(null)}
+          items={[
+            { label: '编辑记录', onClick: handleEdit },
+            { label: '删除记录', danger: true, onClick: handleDeleteRequest },
+          ]}
+        />
+      )}
+
+      {/* Edit dialog */}
+      {editEntry && (
+        <FocusRecordEditDialog
+          entry={editEntry}
+          onConfirm={handleEditConfirm}
+          onCancel={() => setEditTarget(null)}
+        />
+      )}
+
+      {/* Delete confirm */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="删除记录"
+        message="确定要删除这条专注记录吗？"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }
 
-function TodayView({ entries, resolvePlan, formatTime }: {
+function HistoryEntryRow({ entry, resolvePlan, formatTime, isLast, onMoreClick }: {
+  entry: TimerHistoryEntry
+  resolvePlan: (id?: string) => { title: string; color: string } | null
+  formatTime: (iso: string) => string
+  isLast: boolean
+  onMoreClick: (entryId: string, anchorRect: DOMRect) => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  const plan = resolvePlan(entry.planId)
+
+  return (
+    <div
+      style={{ position: 'relative', marginBottom: isLast ? 0 : 8 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div style={{ position: 'absolute', left: -15, top: 6, width: 8, height: 8, borderRadius: '50%', background: plan ? '#FF9F0A' : 'rgba(255,159,10,0.4)', border: '2px solid var(--bg-base)' }} />
+      <div style={{ background: hovered ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)', padding: '6px 8px', transition: 'background 0.15s' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 500 }}>{formatTime(entry.completedAt)}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ color: '#FF9F0A', fontSize: 11 }}>{entry.durationMinutes} min</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); onMoreClick(entry.id, (e.target as HTMLElement).getBoundingClientRect()) }}
+              style={{
+                background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer',
+                fontSize: 14, padding: '0 2px', lineHeight: 1,
+                opacity: hovered ? 1 : 0, transition: 'opacity 0.15s',
+              }}
+            >
+              ⋯
+            </button>
+          </div>
+        </div>
+        {plan ? (
+          <div style={{ marginTop: 3 }}>
+            <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: `${plan.color}18`, color: plan.color }}>{plan.title}</span>
+          </div>
+        ) : entry.planId ? (
+          <div style={{ marginTop: 3, color: 'var(--text-quaternary)', fontSize: 10 }}>已删除计划</div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function TodayView({ entries, resolvePlan, formatTime, onMoreClick }: {
   entries: TimerHistoryEntry[]
   resolvePlan: (id?: string) => { title: string; color: string } | null
   formatTime: (iso: string) => string
+  onMoreClick: (entryId: string, anchorRect: DOMRect) => void
 }) {
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
       {entries.length > 0 ? (
         <div style={{ position: 'relative', paddingLeft: 18, maxHeight: 130, overflowY: 'auto' }}>
           <div style={{ position: 'absolute', left: 5, top: 4, bottom: 4, width: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 1 }} />
-          {entries.slice(0, 10).map((entry, i) => {
-            const plan = resolvePlan(entry.planId)
-            const isLast = i === entries.length - 1
-            return (
-              <div key={entry.completedAt} style={{ position: 'relative', marginBottom: isLast ? 0 : 8 }}>
-                <div style={{ position: 'absolute', left: -15, top: 6, width: 8, height: 8, borderRadius: '50%', background: plan ? '#FF9F0A' : 'rgba(255,159,10,0.4)', border: '2px solid var(--bg-base)' }} />
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)', padding: '6px 8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 500 }}>{formatTime(entry.completedAt)}</span>
-                    <span style={{ color: '#FF9F0A', fontSize: 11 }}>{entry.durationMinutes} min</span>
-                  </div>
-                  {plan ? (
-                    <div style={{ marginTop: 3 }}>
-                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: `${plan.color}18`, color: plan.color }}>{plan.title}</span>
-                    </div>
-                  ) : entry.planId ? (
-                    <div style={{ marginTop: 3, color: 'var(--text-quaternary)', fontSize: 10 }}>已删除计划</div>
-                  ) : null}
-                </div>
-              </div>
-            )
-          })}
+          {entries.slice(0, 10).map((entry, i) => (
+            <HistoryEntryRow
+              key={entry.id}
+              entry={entry}
+              resolvePlan={resolvePlan}
+              formatTime={formatTime}
+              isLast={i === entries.slice(0, 10).length - 1}
+              onMoreClick={onMoreClick}
+            />
+          ))}
         </div>
       ) : (
         <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-quaternary)', fontSize: 12 }}>今天还没有专注记录</div>
@@ -112,10 +220,11 @@ function TodayView({ entries, resolvePlan, formatTime }: {
   )
 }
 
-function WeekView({ entries, resolvePlan, formatTime }: {
+function WeekView({ entries, resolvePlan, formatTime, onMoreClick }: {
   entries: TimerHistoryEntry[]
   resolvePlan: (id?: string) => { title: string; color: string } | null
   formatTime: (iso: string) => string
+  onMoreClick: (entryId: string, anchorRect: DOMRect) => void
 }) {
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
 
@@ -154,25 +263,16 @@ function WeekView({ entries, resolvePlan, formatTime }: {
           {expandedDate === day.date && (
             <div style={{ paddingLeft: 18, position: 'relative', marginTop: 4 }}>
               <div style={{ position: 'absolute', left: 5, top: 4, bottom: 4, width: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 1 }} />
-              {day.entries.map((entry) => {
-                const plan = resolvePlan(entry.planId)
-                return (
-                  <div key={entry.completedAt} style={{ position: 'relative', marginBottom: 6 }}>
-                    <div style={{ position: 'absolute', left: -15, top: 6, width: 8, height: 8, borderRadius: '50%', background: plan ? '#FF9F0A' : 'rgba(255,159,10,0.4)', border: '2px solid var(--bg-base)' }} />
-                    <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)', padding: '6px 8px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{formatTime(entry.completedAt)}</span>
-                        <span style={{ color: '#FF9F0A', fontSize: 11 }}>{entry.durationMinutes} min</span>
-                      </div>
-                      {plan && (
-                        <div style={{ marginTop: 3 }}>
-                          <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: `${plan.color}18`, color: plan.color }}>{plan.title}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
+              {day.entries.map((entry, i) => (
+                <HistoryEntryRow
+                  key={entry.id}
+                  entry={entry}
+                  resolvePlan={resolvePlan}
+                  formatTime={formatTime}
+                  isLast={i === day.entries.length - 1}
+                  onMoreClick={onMoreClick}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -184,10 +284,11 @@ function WeekView({ entries, resolvePlan, formatTime }: {
   )
 }
 
-function CalendarView({ entries, resolvePlan, formatTime }: {
+function CalendarView({ entries, resolvePlan, formatTime, onMoreClick }: {
   entries: TimerHistoryEntry[]
   resolvePlan: (id?: string) => { title: string; color: string } | null
   formatTime: (iso: string) => string
+  onMoreClick: (entryId: string, anchorRect: DOMRect) => void
 }) {
   const [viewMonth, setViewMonth] = useState(() => {
     const d = new Date()
@@ -266,21 +367,16 @@ function CalendarView({ entries, resolvePlan, formatTime }: {
       {selectedDate && (
         <div style={{ marginTop: 8, borderTop: '0.5px solid rgba(255,255,255,0.06)', paddingTop: 8, paddingLeft: 18, position: 'relative', maxHeight: 100, overflowY: 'auto' }}>
           <div style={{ position: 'absolute', left: 5, top: 12, bottom: 4, width: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 1 }} />
-          {selectedEntries.map((entry) => {
-            const plan = resolvePlan(entry.planId)
-            return (
-              <div key={entry.completedAt} style={{ position: 'relative', marginBottom: 6 }}>
-                <div style={{ position: 'absolute', left: -15, top: 6, width: 8, height: 8, borderRadius: '50%', background: plan ? '#FF9F0A' : 'rgba(255,159,10,0.4)', border: '2px solid var(--bg-base)' }} />
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)', padding: '6px 8px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{formatTime(entry.completedAt)}</span>
-                    <span style={{ color: '#FF9F0A', fontSize: 11 }}>{entry.durationMinutes} min</span>
-                  </div>
-                  {plan && <div style={{ marginTop: 3 }}><span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: `${plan.color}18`, color: plan.color }}>{plan.title}</span></div>}
-                </div>
-              </div>
-            )
-          })}
+          {selectedEntries.map((entry, i) => (
+            <HistoryEntryRow
+              key={entry.id}
+              entry={entry}
+              resolvePlan={resolvePlan}
+              formatTime={formatTime}
+              isLast={i === selectedEntries.length - 1}
+              onMoreClick={onMoreClick}
+            />
+          ))}
           {selectedEntries.length === 0 && (
             <div style={{ textAlign: 'center', color: 'var(--text-quaternary)', fontSize: 12, padding: '8px 0' }}>该日没有记录</div>
           )}

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { usePlanStore } from '@/stores/planStore'
 import MarkdownEditor from '@/components/common/MarkdownEditor'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
-import { ArrowLeft, Pencil, Eye } from 'lucide-react'
+import { ArrowLeft, Pencil, Eye, MoreVertical, Download, List } from 'lucide-react'
 import { motion } from 'motion/react'
 import { extractH1Title } from '@/utils/markdown'
 import { useToast } from '@/components/common/Toast'
@@ -13,32 +13,38 @@ import MarkdownContextMenu from '@/components/ui/MarkdownContextMenu'
 import useTextSelection from '@/hooks/useTextSelection'
 import { applyOperationToTextarea, createInsertImageWithPath, createInsertLinkRef } from '@/lib/markdown-operations'
 import { type LinkSearchResult } from '@/lib/link-resolver'
-import { useNoteStore } from '@/stores/noteStore'
-import { usePetStore } from '@/stores/petStore'
-import { imageApi, fs } from '@/lib/ipc'
+import { useNavigationStore } from '@/stores/navigationStore'
+import { imageApi } from '@/lib/ipc'
 import LinkSuggestionPopup from '@/components/common/LinkSuggestionPopup'
+import ContextMenu from '@/components/ui/ContextMenu'
+import ExportDialog from '@/components/common/ExportDialog'
+import { buildExportHtml, type ExportMode } from '@/lib/export-pdf'
+import { pdfExport } from '@/lib/ipc'
+import { useToastStore } from '@/stores/toastStore'
+import TableOfContents from '@/components/common/TableOfContents'
+import { extractHeadings } from '@/lib/toc-extract'
 
-const AUTO_SAVE_DELAY = 3000
-
-const IMAGE_REF_REGEX = /!\[[^\]]*\]\([^)]*\/assets\/([^)]+)\)/g
-
-async function cleanupOrphanImages(mdFilePath: string, content: string): Promise<void> {
-  const refs = new Set<string>()
-  let match
-  while ((match = IMAGE_REF_REGEX.exec(content)) !== null) {
-    if (match[1]) refs.add(match[1])
-  }
-  if (refs.size === 0) return
-  try {
-    const dir = mdFilePath.replace(/\.md$/, '')
-    const assetsPath = `${dir}/assets`
-    const files = await fs.readDir(assetsPath)
-    for (const file of files) {
-      if (!refs.has(file)) {
-        await imageApi.deleteImage(mdFilePath, file)
-      }
+function findScrollParent(el: HTMLElement): HTMLElement | null {
+  let parent = el.parentElement
+  while (parent) {
+    const { overflowY } = getComputedStyle(parent)
+    if ((overflowY === 'auto' || overflowY === 'scroll') && parent.scrollHeight > parent.clientHeight) {
+      return parent
     }
-  } catch { /* no assets dir */ }
+    parent = parent.parentElement
+  }
+  return null
+}
+
+function scrollToElement(el: HTMLElement) {
+  const container = findScrollParent(el)
+  if (!container) return
+  const containerRect = container.getBoundingClientRect()
+  const elRect = el.getBoundingClientRect()
+  container.scrollTo({
+    top: container.scrollTop + elRect.top - containerRect.top,
+    behavior: 'smooth',
+  })
 }
 
 interface PlanEditorProps {
@@ -50,19 +56,17 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
   const loadPlanContent = usePlanStore((s) => s.loadPlanContent)
   const savePlanContent = usePlanStore((s) => s.savePlanContent)
   const updatePlan = usePlanStore((s) => s.updatePlan)
-  const setActivePlan = usePlanStore((s) => s.setActivePlan)
   const updatePlanTags = usePlanStore((s) => s.updatePlanTags)
   const plans = usePlanStore((s) => s.plans)
+  const navPush = useNavigationStore((s) => s.push)
 
   const [content, setContent] = useState('')
   const [editMode, setEditMode] = useState<'edit' | 'preview'>('edit')
   const [dirty, setDirty] = useState(false)
-  const autoSaveTimer = useRef<ReturnType<typeof setTimeout>>(null)
   const contentRef = useRef(content)
   contentRef.current = content
   const dirtyRef = useRef(false)
   dirtyRef.current = dirty
-  const prevImageRefsRef = useRef<Set<string>>(new Set())
   const allTags = useMemo(() => getAllTags(plans), [plans])
 
   const [contextMenuState, setContextMenuState] = useState<{
@@ -78,6 +82,12 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
   } | null>(null)
   const editorRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const [editorContextMenu, setEditorContextMenu] = useState<DOMRect | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
+
+  const [tocVisible, setTocVisible] = useState(false)
+  const [currentLineIndex, setCurrentLineIndex] = useState<number | null>(0)
+  const toggleTocRef = useRef<() => void>(() => {})
 
   const { showToast, ToastContainer } = useToast()
 
@@ -88,7 +98,7 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
     })
   }, [planId, loadPlanContent])
 
-  const doSave = useCallback(async (isAuto: boolean) => {
+  const doSave = useCallback(async () => {
     if (!plan) return
     await savePlanContent(plan.id, contentRef.current)
 
@@ -97,38 +107,40 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
       await updatePlan(plan.id, { title: h1 })
     }
 
-    // Orphan image cleanup — only when image refs changed
-    const currentRefs = new Set<string>()
-    let match
-    while ((match = IMAGE_REF_REGEX.exec(contentRef.current)) !== null) {
-      if (match[1]) currentRefs.add(match[1])
-    }
-    if (currentRefs.size > 0 || prevImageRefsRef.current.size > 0) {
-      if (currentRefs.size !== prevImageRefsRef.current.size ||
-          [...currentRefs].some(r => !prevImageRefsRef.current.has(r))) {
-        await cleanupOrphanImages(plan.filePath, contentRef.current)
-      }
-    }
-    prevImageRefsRef.current = currentRefs
-
     setDirty(false)
-    showToast(isAuto ? '自动保存成功' : '保存成功')
+    showToast('保存成功')
   }, [plan, savePlanContent, updatePlan, showToast])
+
+  const doSaveRef = useRef(doSave)
+  doSaveRef.current = doSave
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
-        doSave(false)
+        doSaveRef.current()
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [doSave])
+  }, [])
+
+  const toggleToc = useCallback(() => { setTocVisible((v) => !v) }, [])
+  toggleTocRef.current = toggleToc
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'O') {
+        e.preventDefault()
+        toggleTocRef.current()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   useEffect(() => {
     return () => {
-      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
       if (dirtyRef.current) {
         const store = usePlanStore.getState()
         const currentPlan = store.plans.find((p) => p.id === planId)
@@ -208,23 +220,65 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
   }, [linkPopupState, textareaEl, content])
 
   const handleLinkClick = useCallback((id: string, type: string) => {
-    if (type === 'plan') {
-      setActivePlan(id)
-    } else if (type === 'note') {
-      useNoteStore.getState().setActiveNote(id)
-      usePetStore.getState().setActivePanel('notes')
+    if (type === 'deleted') {
+      showToast('链接指向的内容已被删除')
+      return
     }
-  }, [setActivePlan])
+    if (type === 'plan') {
+      navPush({ panel: 'planner', subView: 'editor', planId: id })
+    } else if (type === 'note') {
+      navPush({ panel: 'notes', subView: 'editor', noteId: id })
+    }
+  }, [navPush, showToast])
+
+  // Close link popup when trigger chars are deleted
+  useEffect(() => {
+    if (!linkPopupState) return
+    const start = linkPopupState.triggerStart
+    const firstChar = content[start]
+    const twoChars = content.substring(start, start + 2)
+    if (firstChar !== '@' && twoChars !== '[[') {
+      setLinkPopupState(null)
+    }
+  }, [content, linkPopupState])
 
   if (!plan) return null
+
+  const handleExport = async (mode: ExportMode) => {
+    if (!plan) return
+    try {
+      const loadedContent = await loadPlanContent(planId)
+      const html = await buildExportHtml({
+        content: loadedContent || '',
+        mdFilePath: plan.filePath,
+        title: plan.title,
+        mode,
+        fileName: `${plan.title}.pdf`,
+        meta: {
+          tags: plan.tags,
+          createdAt: plan.createdAt?.slice(0, 10),
+          planType: plan.planType,
+          startDate: plan.startDate,
+          endDate: plan.endDate,
+        },
+      })
+      const result = await pdfExport.generate(html, `${plan.title}.pdf`)
+      setExportOpen(false)
+      if (result.success && 'filePath' in result) {
+        useToastStore.getState().show('PDF 导出成功')
+      } else if (!result.success) {
+        useToastStore.getState().show('导出失败: ' + result.error)
+      }
+    } catch (err: any) {
+      setExportOpen(false)
+      useToastStore.getState().show('导出失败: ' + (err.message || String(err)))
+    }
+  }
 
   const handleChange = useCallback((newContent: string) => {
     setContent(newContent)
     setDirty(true)
-
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
-    autoSaveTimer.current = setTimeout(() => doSave(true), AUTO_SAVE_DELAY)
-  }, [doSave])
+  }, [])
 
   const handleApplyOperation = useCallback((newText: string, cursorStart: number, cursorEnd: number) => {
     if (!textareaEl) return
@@ -245,14 +299,57 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
     }
   }, [plan, content, textareaEl, showToast])
 
+  const handleHeadingClick = useCallback((lineIndex: number) => {
+    setCurrentLineIndex(lineIndex)
+    if (!editorRef.current) return
+
+    if (editMode === 'edit') {
+      const textarea = editorRef.current.querySelector('textarea')
+      if (textarea) {
+        const lines = content.split('\n')
+        let pos = 0
+        for (let i = 0; i < lineIndex; i++) pos += (lines[i]?.length ?? 0) + 1
+        textarea.focus()
+        textarea.setSelectionRange(pos, pos)
+        const style = getComputedStyle(textarea)
+        const measure = document.createElement('div')
+        measure.style.cssText = [
+          'position:absolute', 'visibility:hidden', 'white-space:pre-wrap',
+          'word-wrap:break-word', `width:${style.width}`, `font:${style.font}`,
+          `padding:${style.padding}`, `border:${style.border}`,
+          `line-height:${style.lineHeight}`, `letter-spacing:${style.letterSpacing}`,
+        ].join(';')
+        measure.textContent = content.substring(0, pos)
+        document.body.appendChild(measure)
+        textarea.scrollTop = measure.offsetHeight - parseInt(style.paddingTop || '0')
+        document.body.removeChild(measure)
+      }
+      return
+    }
+
+    // preview mode
+    const headings = extractHeadings(content, 3)
+    const targetIdx = headings.findIndex(h => h.lineIndex === lineIndex)
+    if (targetIdx !== -1) {
+      const headingEls = editorRef.current.querySelectorAll('h1, h2, h3, h4, h5, h6')
+      if (headingEls.length > targetIdx) {
+        scrollToElement(headingEls[targetIdx] as HTMLElement)
+      }
+    }
+  }, [editMode, content])
+
   return (
-    <div ref={rootRef} className="flex flex-col h-full gap-3" style={{ position: 'relative' }}>
+    <div ref={rootRef} className="flex flex-col h-full gap-3" style={{ position: 'relative', paddingTop: 8 }}>
       <ToastContainer />
 
       {/* Toolbar */}
       <div className="flex items-center gap-3">
         <motion.button
-          onClick={() => setActivePlan(null)}
+          onClick={() => {
+            if (tocVisible) { setTocVisible(false) }
+            usePlanStore.getState().deactivateTab()
+            navPush({ panel: 'planner', subView: 'list' })
+          }}
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.92 }}
           style={{
@@ -277,6 +374,24 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent-orange)', flexShrink: 0 }} />
           )}
         </div>
+
+        <motion.button
+          onClick={toggleToc}
+          whileTap={{ scale: 0.9 }}
+          title="目录 (Ctrl+Shift+O)"
+          style={{
+            width: 24, height: 24, borderRadius: 5,
+            background: tocVisible ? 'rgba(10,132,255,0.15)' : 'transparent',
+            border: tocVisible ? '0.5px solid rgba(10,132,255,0.30)' : 'none',
+            color: tocVisible ? 'var(--accent-blue)' : 'var(--text-quaternary)',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background 0.2s ease, color 0.2s ease',
+            flexShrink: 0,
+          }}
+        >
+          <List size={12} />
+        </motion.button>
 
         {/* Edit / Preview toggle */}
         <div
@@ -305,6 +420,13 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
             </motion.button>
           ))}
         </div>
+
+        <button
+          onClick={(e) => { e.stopPropagation(); setEditorContextMenu(e.currentTarget.getBoundingClientRect()) }}
+          style={{ background: 'transparent', border: 'none', color: 'var(--text-quaternary)', padding: 4, borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
+        >
+          <MoreVertical size={14} />
+        </button>
       </div>
 
       {/* Tags */}
@@ -313,6 +435,24 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
         allTags={allTags}
         onUpdateTags={(tags) => updatePlanTags(plan.id, tags)}
       />
+
+      {editorContextMenu && (
+        <ContextMenu
+          items={[
+            {
+              label: '导出 PDF',
+              icon: <Download size={13} />,
+              onClick: () => {
+                setExportOpen(true)
+                setEditorContextMenu(null)
+              },
+            },
+          ]}
+          anchorRect={editorContextMenu}
+          onClose={() => setEditorContextMenu(null)}
+        />
+      )}
+      {exportOpen && <ExportDialog open onClose={() => setExportOpen(false)} onExport={handleExport} />}
 
       {/* Content */}
       <div ref={editorRef} className="flex-1 min-h-0" style={{ overflow: editMode === 'preview' ? 'auto' : 'hidden' }}>
@@ -326,6 +466,7 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
             onInsertImageFromPicker={handleInsertImageFromPicker}
             showToast={showToast}
             onTriggerLinkPopup={handleTriggerLinkPopup}
+            onCursorLineChange={setCurrentLineIndex}
           />
         ) : (
           <div
@@ -364,6 +505,18 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
           onClose={handleLinkPopupClose}
         />,
         document.body,
+      )}
+
+      {rootRef.current && createPortal(
+        <TableOfContents
+          content={content}
+          maxLevel={3}
+          currentLineIndex={currentLineIndex}
+          onHeadingClick={handleHeadingClick}
+          onClose={() => setTocVisible(false)}
+          open={tocVisible}
+        />,
+        rootRef.current
       )}
     </div>
   )

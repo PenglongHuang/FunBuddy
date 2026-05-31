@@ -49,4 +49,7 @@ export const IPC = {
   IMAGE_CLEANUP: 'image:cleanup',
   IMAGE_READ_AS_DATA_URL: 'image:readAsDataUrl',
   IMAGE_MOVE_ASSETS: 'image:moveAssets',
+
+  // PDF
+  EXPORT_PDF: 'export:pdf',
 } as const

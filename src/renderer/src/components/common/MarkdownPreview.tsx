@@ -10,7 +10,7 @@ import bash from 'highlight.js/lib/languages/bash'
 import xml from 'highlight.js/lib/languages/xml'
 import markdown from 'highlight.js/lib/languages/markdown'
 import { imageApi } from '@/lib/ipc'
-import { parseLinks, replaceLinksWithHtml } from '@/lib/link-parser'
+import { parseLinks, replaceLinksWithHtml, maskCodeBlocks, escapeRawAngles } from '@/lib/link-parser'
 import { resolveLinks } from '@/lib/link-resolver'
 
 hljs.registerLanguage('javascript', javascript)
@@ -48,7 +48,7 @@ export default function MarkdownPreview({ content, mdFilePath, onLinkClick }: Ma
 
   const imageRefs = useMemo(() => {
     const refs: string[] = []
-    const regex = /!\[[^\]]*\]\([^)]*\/assets\/([^)]+)\)/g
+    const regex = /!\[[^\]]*\]\(([^)]*\/assets\/[^)]+)\)/g
     let match
     while ((match = regex.exec(content)) !== null) {
       if (match[1]) refs.push(match[1])
@@ -58,12 +58,22 @@ export default function MarkdownPreview({ content, mdFilePath, onLinkClick }: Ma
 
   const imageRefsKey = imageRefs.join(',')
 
-  const resolvedLinkMap = useMemo(() => {
-    const links = parseLinks(content)
-    if (links.length === 0) return new Map<string, any>()
+  const [resolvedLinkMap, setResolvedLinkMap] = useState<Map<string, any>>(new Map())
+
+  const { masked: maskedContent, restore: restoreCodeBlocks } = useMemo(
+    () => maskCodeBlocks(content),
+    [content],
+  )
+
+  useEffect(() => {
+    const links = parseLinks(maskedContent)
+    if (links.length === 0) {
+      setResolvedLinkMap(new Map())
+      return
+    }
     const ids = Array.from(new Set(links.map(l => l.id)))
-    return resolveLinks(ids)
-  }, [content])
+    resolveLinks(ids).then(setResolvedLinkMap)
+  }, [maskedContent])
 
   useEffect(() => {
     if (!mdFilePath || imageRefs.length === 0) {
@@ -100,12 +110,13 @@ export default function MarkdownPreview({ content, mdFilePath, onLinkClick }: Ma
     r.code = codeRenderer.code.bind(codeRenderer)
 
     r.image = function ({ href, title, text }: { href: string; title?: string; text?: string }) {
-      const localMatch = href?.match(/[^)]*\/assets\/(.+)/)
-      if (localMatch && imageMap[localMatch[1]]) {
-        return `<img src="${imageMap[localMatch[1]]}" alt="${text || ''}" ${title ? `title="${title}"` : ''} style="max-width:100%;border-radius:var(--radius-sm)">`
+      const isLocalAsset = href?.includes('/assets/')
+      if (isLocalAsset && imageMap[href]) {
+        return `<img src="${imageMap[href]}" alt="${text || ''}" ${title ? `title="${title}"` : ''} style="max-width:100%;border-radius:var(--radius-sm)">`
       }
-      if (localMatch && !imageMap[localMatch[1]]) {
-        return `<div style="padding:8px 12px;background:rgba(255,255,255,0.05);border-radius:var(--radius-sm);color:var(--text-tertiary);font-size:12px;text-align:center">图片未找到: ${text || localMatch[1]}</div>`
+      if (isLocalAsset && !imageMap[href]) {
+        const fileName = href.split('/').pop() || href
+        return `<div style="padding:8px 12px;background:rgba(255,255,255,0.05);border-radius:var(--radius-sm);color:var(--text-tertiary);font-size:12px;text-align:center">图片未找到: ${text || fileName}</div>`
       }
       return `<img src="${href || ''}" alt="${text || ''}" ${title ? `title="${title}"` : ''} style="max-width:100%;border-radius:var(--radius-sm)">`
     }
@@ -114,24 +125,27 @@ export default function MarkdownPreview({ content, mdFilePath, onLinkClick }: Ma
   }, [imageMap])
 
   const processedContent = useMemo(() => {
-    if (resolvedLinkMap.size === 0) return content
-    return replaceLinksWithHtml(content, resolvedLinkMap)
-  }, [content, resolvedLinkMap])
+    const linkReplaced = resolvedLinkMap.size === 0
+      ? maskedContent
+      : replaceLinksWithHtml(maskedContent, resolvedLinkMap)
+    return restoreCodeBlocks(linkReplaced)
+  }, [maskedContent, resolvedLinkMap, restoreCodeBlocks])
 
   const html = useMemo(() => {
     marked.use({ renderer, gfm: true, breaks: true })
-    return marked.parse(processedContent, { async: false }) as string
+    return marked.parse(escapeRawAngles(processedContent), { async: false }) as string
   }, [processedContent, renderer])
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     const target = (e.target as HTMLElement).closest('.wikilink') as HTMLElement | null
     if (!target) return
     const id = target.dataset.linkId
+    if (!id) return
+    e.preventDefault()
+    e.stopPropagation()
     const type = target.dataset.linkType
-    if (id && type && onLinkClick) {
-      e.preventDefault()
-      e.stopPropagation()
-      onLinkClick(id, type)
+    if (onLinkClick) {
+      onLinkClick(id, type || 'deleted')
     }
   }, [onLinkClick])
 

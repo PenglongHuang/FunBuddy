@@ -637,6 +637,23 @@ export default function SettingsPanel() {
           max={6}
           onChange={setTocMaxLevel}
         />
+        <NumberInputRow
+          label="最大 Tab 数"
+          value={pendingApp.maxTabsPerPanel}
+          unit="个"
+          min={3}
+          max={50}
+          onChange={(v) => { const next = { ...pendingApp, maxTabsPerPanel: v }; setPendingApp(next); checkDirty(pendingPomodoro, next) }}
+        />
+        <NumberInputRow
+          label="导航历史上限"
+          value={pendingApp.navHistoryLimit}
+          unit="条"
+          min={10}
+          max={500}
+          step={10}
+          onChange={(v) => { const next = { ...pendingApp, navHistoryLimit: v }; setPendingApp(next); checkDirty(pendingPomodoro, next) }}
+        />
       </SettingsGroup>
 
       {/* ===== Data Management Group ===== */}

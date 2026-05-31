@@ -10,6 +10,7 @@ export interface TimerState {
 }
 
 export interface TimerHistoryEntry {
+  id: string
   completedAt: string
   phase: 'focus'
   durationMinutes: number

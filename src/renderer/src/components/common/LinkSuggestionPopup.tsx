@@ -15,9 +15,18 @@ export default function LinkSuggestionPopup({ anchorRect, onSelect, onClose }: L
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const popupW = 280
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const flipUp = anchorRect.y + 320 > vh - 8
+  let left = anchorRect.x
+  if (left + popupW > vw - 8) left = vw - popupW - 8
+  left = Math.max(8, left)
 
   useEffect(() => {
-    setResults(searchLinks(''))
+    searchLinks('').then(setResults)
   }, [])
 
   useEffect(() => {
@@ -25,9 +34,10 @@ export default function LinkSuggestionPopup({ anchorRect, onSelect, onClose }: L
   }, [])
 
   useEffect(() => {
-    const r = searchLinks(query)
-    setResults(r)
-    setSelectedIndex(0)
+    searchLinks(query).then(r => {
+      setResults(r)
+      setSelectedIndex(0)
+    })
   }, [query])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -43,6 +53,7 @@ export default function LinkSuggestionPopup({ anchorRect, onSelect, onClose }: L
         onSelect(results[selectedIndex])
       }
     } else if (e.key === 'Escape') {
+      e.stopPropagation()
       e.preventDefault()
       onClose()
     }
@@ -53,14 +64,28 @@ export default function LinkSuggestionPopup({ anchorRect, onSelect, onClose }: L
     el?.scrollIntoView({ block: 'nearest' })
   }, [selectedIndex])
 
+  // Close on click outside
+  useEffect(() => {
+    const handleMouseDown = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [onClose])
+
   return createPortal(
     <div
+      ref={containerRef}
       style={{
         position: 'fixed',
-        left: anchorRect.x,
-        top: anchorRect.y,
+        left,
+        ...(flipUp
+          ? { bottom: vh - anchorRect.y + 4 }
+          : { top: anchorRect.y }),
         zIndex: 10000,
-        width: 280,
+        width: popupW,
         maxHeight: 320,
         background: 'rgba(40, 40, 44, 0.98)',
         border: '0.5px solid rgba(255,255,255,0.12)',

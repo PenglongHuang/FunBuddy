@@ -72,6 +72,12 @@ const api = {
   imageMoveAssets: (oldMdFilePath: string, newMdFilePath: string) =>
     ipcRenderer.invoke(IPC.IMAGE_MOVE_ASSETS, oldMdFilePath, newMdFilePath) as Promise<void>,
 
+  // PDF
+  exportPdf: (html: string, fileName: string, defaultPath?: string) =>
+    ipcRenderer.invoke(IPC.EXPORT_PDF, html, fileName, defaultPath) as Promise<
+      { success: true; filePath: string } | { success: true } | { success: false; error: string }
+    >,
+
   // Auto-launch
   autolaunchEnable: () => ipcRenderer.invoke(IPC.AUTOLAUNCH_ENABLE),
   autolaunchDisable: () => ipcRenderer.invoke(IPC.AUTOLAUNCH_DISABLE),

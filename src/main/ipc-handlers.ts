@@ -1,7 +1,8 @@
-import { ipcMain, Notification, dialog, screen, app } from 'electron'
+import { ipcMain, Notification, dialog, screen, app, BrowserWindow } from 'electron'
 import { readFile, writeFile, unlink, readdir, mkdir, rm, cp } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join, dirname, resolve, parse as parsePath } from 'path'
+import { tmpdir } from 'os'
 import { getStore } from './store'
 import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode, startPetCursorTracking, stopPetCursorTracking, setPetDragging, movePetDrag, toggleAlwaysOnTop } from './window'
 import { IPC } from '../shared/ipc-channels'
@@ -31,12 +32,11 @@ export function registerIpcHandlers(): void {
     return fullPath
   }
 
-  function getAssetsInfo(mdFilePath: string): { dir: string; assetsDir: string; baseName: string } {
+  function getAssetsDir(mdFilePath: string): { dir: string; assetsDir: string } {
     const dir = getStorageDir()
-    const mdFull = validatePath(dir, mdFilePath)
-    const mdDir = dirname(mdFull)
-    const { name } = parsePath(mdFull)
-    return { dir, assetsDir: join(mdDir, name, 'assets'), baseName: name }
+    const normalized = mdFilePath.replace(/\\/g, '/')
+    const category = normalized.startsWith('notes/') ? 'notes' : 'plans'
+    return { dir, assetsDir: join(dir, category, 'assets', 'imgs') }
   }
 
   // Store
@@ -252,6 +252,46 @@ export function registerIpcHandlers(): void {
     return writeFile(filePath, content, 'utf-8')
   })
 
+  // PDF export
+  ipcMain.handle(
+    IPC.EXPORT_PDF,
+    async (_e, html: string, fileName: string, defaultPath?: string) => {
+      let win: BrowserWindow | null = null
+      let tmpFile = ''
+      try {
+        win = new BrowserWindow({ width: 800, height: 1200, show: false, webPreferences: { offscreen: true } })
+        tmpFile = join(tmpdir(), `funbuddy-export-${nanoid(8)}.html`)
+        await writeFile(tmpFile, html, 'utf-8')
+        await win.loadURL(`file://${tmpFile}`)
+        await new Promise(resolve => setTimeout(resolve, 500))
+
+        const pdfBytes = await win.webContents.printToPDF({
+          pageSize: 'A4',
+          printBackground: true,
+        })
+
+        const saveResult = await withForegroundDialog(() =>
+          dialog.showSaveDialog({
+            defaultPath: defaultPath || fileName,
+            filters: [{ name: 'PDF', extensions: ['pdf'] }],
+          }),
+        )
+
+        if (saveResult.canceled || !saveResult.filePath) {
+          return { success: true as const }
+        }
+
+        await writeFile(saveResult.filePath, Buffer.from(pdfBytes))
+        return { success: true as const, filePath: saveResult.filePath }
+      } catch (err: any) {
+        return { success: false as const, error: err.message || String(err) }
+      } finally {
+        win?.destroy()
+        if (tmpFile) { unlink(tmpFile).catch(() => {}) }
+      }
+    },
+  )
+
   // Auto-launch
   ipcMain.handle(IPC.AUTOLAUNCH_ENABLE, () => {
     app.setLoginItemSettings({ openAtLogin: true })
@@ -306,7 +346,7 @@ export function registerIpcHandlers(): void {
       throw new Error(`Unsupported image format: ${ext}`)
     }
 
-    const { assetsDir, baseName } = getAssetsInfo(mdFilePath)
+    const { assetsDir } = getAssetsDir(mdFilePath)
     await mkdir(assetsDir, { recursive: true })
 
     const buffer = Buffer.from(imageData)
@@ -324,10 +364,11 @@ export function registerIpcHandlers(): void {
     }
 
     const actualExt = format === 'jpeg' ? 'jpg' : format
-    const fileName = `${nanoid(8)}.${actualExt}`
+    const ts = new Date().toISOString().replace(/[-T:.Z]/g, '').slice(0, 14)
+    const fileName = `${ts}-${nanoid(4)}.${actualExt}`
     await writeFile(join(assetsDir, fileName), buffer)
 
-    const relativePath = `./${baseName}/assets/${fileName}`
+    const relativePath = `./assets/imgs/${fileName}`
     return { relativePath, fileName }
   })
 
@@ -340,55 +381,53 @@ export function registerIpcHandlers(): void {
     )
     if (result.canceled || result.filePaths.length === 0) return null
 
-    const { assetsDir, baseName } = getAssetsInfo(mdFilePath)
+    const { assetsDir } = getAssetsDir(mdFilePath)
     await mkdir(assetsDir, { recursive: true })
 
     const saved = await Promise.all(result.filePaths.map(async (srcPath) => {
       const ext = srcPath.split('.').pop()?.toLowerCase() || 'png'
-      const fileName = `${nanoid(8)}.${ext}`
+      const ts = new Date().toISOString().replace(/[-T:.Z]/g, '').slice(0, 14)
+      const fileName = `${ts}-${nanoid(4)}.${ext}`
       await cp(srcPath, join(assetsDir, fileName))
-      return { relativePath: `./${baseName}/assets/${fileName}`, fileName }
+      return { relativePath: `./assets/imgs/${fileName}`, fileName }
     }))
 
     return saved[0]
   })
 
-  ipcMain.handle(IPC.IMAGE_DELETE, async (_e, mdFilePath: string, imageFileName: string) => {
-    const { assetsDir } = getAssetsInfo(mdFilePath)
-    const fullPath = join(assetsDir, imageFileName)
-    if (!resolve(fullPath).startsWith(resolve(assetsDir))) {
-      throw new Error('Invalid image path')
-    }
-    try { await unlink(fullPath) } catch { /* already deleted */ }
-    for (const key of dataUrlCache.keys()) {
-      if (key.includes(imageFileName)) dataUrlCache.delete(key)
-    }
+  ipcMain.handle(IPC.IMAGE_DELETE, async () => {
+    // No-op: never delete images
   })
 
-  ipcMain.handle(IPC.IMAGE_CLEANUP, async (_e, mdFilePath: string) => {
-    const { dir } = getAssetsInfo(mdFilePath)
-    const mdFull = validatePath(dir, mdFilePath)
-    const mdDir = dirname(mdFull)
-    const { name } = parsePath(mdFull)
-    const noteDir = join(mdDir, name)
-    if (!resolve(noteDir).startsWith(resolve(mdDir))) {
-      throw new Error('Invalid path')
-    }
-    try { await rm(noteDir, { recursive: true, force: true }) } catch { /* ignore */ }
-    for (const key of dataUrlCache.keys()) {
-      if (key.startsWith(mdFilePath)) dataUrlCache.delete(key)
-    }
+  ipcMain.handle(IPC.IMAGE_CLEANUP, async () => {
+    // No-op: never delete images
   })
 
-  ipcMain.handle(IPC.IMAGE_READ_AS_DATA_URL, async (_e, mdFilePath: string, imageFileName: string, maxWidth?: number) => {
-    const cacheKey = `${mdFilePath}:${imageFileName}:${maxWidth || 0}`
+  ipcMain.handle(IPC.IMAGE_READ_AS_DATA_URL, async (_e, mdFilePath: string, imagePath: string, maxWidth?: number) => {
+    const fileName = imagePath.replace(/\\/g, '/').split('/').pop() || imagePath
+    const cacheKey = `${fileName}:${maxWidth || 0}`
     const cached = dataUrlCache.get(cacheKey)
     if (cached) return cached
 
-    const { assetsDir } = getAssetsInfo(mdFilePath)
-    const fullPath = join(assetsDir, imageFileName)
-    if (!resolve(fullPath).startsWith(resolve(assetsDir))) {
+    const storageDir = getStorageDir()
+    const { assetsDir } = getAssetsDir(mdFilePath)
+    let fullPath = join(assetsDir, fileName)
+
+    // Fallback to other category
+    if (!existsSync(fullPath)) {
+      const normalized = mdFilePath.replace(/\\/g, '/')
+      const otherCategory = normalized.startsWith('notes/') ? 'plans' : 'notes'
+      const fallbackDir = join(storageDir, otherCategory, 'assets', 'imgs')
+      const fallbackPath = join(fallbackDir, fileName)
+      if (existsSync(fallbackPath)) fullPath = fallbackPath
+    }
+
+    if (!resolve(fullPath).startsWith(resolve(storageDir))) {
       throw new Error('Invalid image path')
+    }
+
+    if (!existsSync(fullPath)) {
+      throw new Error(`Image not found: ${fileName}`)
     }
 
     let buffer: Buffer
@@ -417,25 +456,7 @@ export function registerIpcHandlers(): void {
     return result
   })
 
-  ipcMain.handle(IPC.IMAGE_MOVE_ASSETS, async (_e, oldMdFilePath: string, newMdFilePath: string) => {
-    const dir = getStorageDir()
-    const oldMdFull = validatePath(dir, oldMdFilePath)
-    const newMdFull = validatePath(dir, newMdFilePath)
-    const { name: oldBase } = parsePath(oldMdFull)
-    const { name: newBase } = parsePath(newMdFull)
-    const oldDir = join(dirname(oldMdFull), oldBase)
-    const newDir = join(dirname(newMdFull), newBase)
-    try {
-      await mkdir(dirname(newDir), { recursive: true })
-      await cp(oldDir, newDir, { recursive: true })
-      await rm(oldDir, { recursive: true, force: true })
-    } catch { /* no assets to move */ }
-    for (const key of dataUrlCache.keys()) {
-      if (key.startsWith(oldMdFilePath)) {
-        const newKey = key.replace(oldMdFilePath, newMdFilePath)
-        dataUrlCache.set(newKey, dataUrlCache.get(key)!)
-        dataUrlCache.delete(key)
-      }
-    }
+  ipcMain.handle(IPC.IMAGE_MOVE_ASSETS, async () => {
+    // No-op: images are centralized, no per-document dirs to move
   })
 }

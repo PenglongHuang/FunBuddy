@@ -9,7 +9,17 @@ export interface LinkSearchResult {
   tags: string[]
 }
 
-export function resolveLinks(ids: string[]): Map<string, ResolvedLink> {
+async function ensureLoaded() {
+  const planStore = usePlanStore.getState()
+  const noteStore = useNoteStore.getState()
+  const promises: Promise<void>[] = []
+  if (!planStore.loaded) promises.push(planStore.load())
+  if (!noteStore.loaded) promises.push(noteStore.load())
+  if (promises.length > 0) await Promise.all(promises)
+}
+
+export async function resolveLinks(ids: string[]): Promise<Map<string, ResolvedLink>> {
+  await ensureLoaded()
   const map = new Map<string, ResolvedLink>()
   const plans = usePlanStore.getState().plans
   const notes = useNoteStore.getState().notes
@@ -29,23 +39,32 @@ export function resolveLinks(ids: string[]): Map<string, ResolvedLink> {
   return map
 }
 
-export function searchLinks(query: string): LinkSearchResult[] {
+export async function searchLinks(query: string): Promise<LinkSearchResult[]> {
+  await ensureLoaded()
   const q = query.toLowerCase().trim()
   const plans = usePlanStore.getState().plans
   const notes = useNoteStore.getState().notes
 
-  const results: LinkSearchResult[] = []
+  const matchedPlans: LinkSearchResult[] = []
+  const matchedNotes: LinkSearchResult[] = []
 
   for (const p of plans) {
     if (!q || p.title.toLowerCase().includes(q)) {
-      results.push({ id: p.id, title: p.title, type: 'plan', tags: p.tags ?? [] })
+      matchedPlans.push({ id: p.id, title: p.title, type: 'plan', tags: p.tags ?? [] })
     }
   }
   for (const n of notes) {
     if (!q || n.title.toLowerCase().includes(q)) {
-      results.push({ id: n.id, title: n.title, type: 'note', tags: n.tags ?? [] })
+      matchedNotes.push({ id: n.id, title: n.title, type: 'note', tags: n.tags ?? [] })
     }
   }
 
-  return results.slice(0, 10)
+  const results: LinkSearchResult[] = []
+  const maxLen = Math.max(matchedPlans.length, matchedNotes.length)
+  for (let i = 0; i < maxLen; i++) {
+    if (matchedPlans[i]) results.push(matchedPlans[i])
+    if (matchedNotes[i]) results.push(matchedNotes[i])
+  }
+
+  return results.slice(0, 20)
 }

@@ -127,3 +127,8 @@ export const imageApi = {
   moveAssets: (oldMdFilePath: string, newMdFilePath: string) =>
     window.api.imageMoveAssets(oldMdFilePath, newMdFilePath),
 }
+
+export const pdfExport = {
+  generate: (html: string, fileName: string, defaultPath?: string) =>
+    window.api.exportPdf(html, fileName, defaultPath),
+}

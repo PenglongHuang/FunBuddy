@@ -1,5 +1,6 @@
 import { useNoteStore } from '@/stores/noteStore'
-import { Plus, Trash2, Pencil, Check, X as XIcon, FileText } from 'lucide-react'
+import { useToastStore } from '@/stores/toastStore'
+import { Plus, Trash2, Pencil, Check, X as XIcon, FileText, Copy } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { getTagColor, getAllTags } from '@/lib/tag-utils'
@@ -13,6 +14,7 @@ export default function NoteList() {
   const setActiveNote = useNoteStore((s) => s.setActiveNote)
   const renameTag = useNoteStore((s) => s.renameTag)
   const deleteTag = useNoteStore((s) => s.deleteTag)
+  const duplicateNote = useNoteStore((s) => s.duplicateNote)
 
   const [showNew, setShowNew] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -135,7 +137,10 @@ export default function NoteList() {
                       onChange={(e) => setRenameValue(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleRenameConfirm()
-                        if (e.key === 'Escape') setRenamingTag(null)
+                        if (e.key === 'Escape') {
+                          e.stopPropagation()
+                          setRenamingTag(null)
+                        }
                       }}
                       style={{
                         width: 60,
@@ -400,6 +405,16 @@ export default function NoteList() {
         <ContextMenu
           items={[
             { label: '查看详情', icon: <FileText size={13} />, onClick: () => setActiveNote(contextMenu.noteId) },
+            {
+              label: '复制笔记',
+              icon: <Copy size={13} />,
+              onClick: async () => {
+                const newNote = await duplicateNote(contextMenu.noteId)
+                setContextMenu(null)
+                setActiveNote(newNote.id)
+                useToastStore.getState().show('复制笔记成功')
+              },
+            },
             { label: '删除笔记', icon: <Trash2 size={13} />, danger: true, onClick: () => deleteNote(contextMenu.noteId) },
           ]}
           anchorRect={contextMenu.rect}

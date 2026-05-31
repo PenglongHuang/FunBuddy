@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { usePlanStore } from '@/stores/planStore'
-import { Plus, CheckSquare, Square, Calendar, Trash2, Timer, FileText, CalendarRange } from 'lucide-react'
+import { Plus, CheckSquare, Square, Calendar, Trash2, Timer, FileText, CalendarRange, Download, Copy } from 'lucide-react'
 import type { PlanTypeFilterValue } from '@/components/common/PlanTypeFilter'
 import SearchBar from '@/components/common/SearchBar'
 import PlanToolbar from '@/components/planner/PlanToolbar'
@@ -9,16 +9,15 @@ import { motion, AnimatePresence } from 'motion/react'
 import PlanCreateDialog from './PlanCreateDialog'
 import PlanEditDialog from './PlanEditDialog'
 import { Button, ContextMenu, ConfirmDialog } from '@/components/ui'
-import { usePetStore } from '@/stores/petStore'
 import { useTimerStore } from '@/stores/timerStore'
 import { useToastStore } from '@/stores/toastStore'
+import { useNavigationStore } from '@/stores/navigationStore'
 import type { PlanType } from '@/types/plan'
+import ExportDialog from '@/components/common/ExportDialog'
+import { buildExportHtml, type ExportMode } from '@/lib/export-pdf'
+import { pdfExport } from '@/lib/ipc'
 
-interface PlanListProps {
-  onSwitchToCalendar: () => void
-}
-
-export default function PlanList({ onSwitchToCalendar }: PlanListProps) {
+export default function PlanList() {
   const plans = usePlanStore((s) => s.plans)
   const loaded = usePlanStore((s) => s.loaded)
   const createPlan = usePlanStore((s) => s.createPlan)
@@ -31,8 +30,9 @@ export default function PlanList({ onSwitchToCalendar }: PlanListProps) {
   const setSortBy = usePlanStore((s) => s.setSortBy)
   const setViewMode = usePlanStore((s) => s.setViewMode)
   const updatePlan = usePlanStore((s) => s.updatePlan)
-  const setActivePanel = usePetStore((s) => s.setActivePanel)
-  const setWindowMode = usePetStore((s) => s.setWindowMode)
+  const loadPlanContent = usePlanStore((s) => s.loadPlanContent)
+  const duplicatePlan = usePlanStore((s) => s.duplicatePlan)
+  const navPush = useNavigationStore((s) => s.push)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -43,6 +43,7 @@ export default function PlanList({ onSwitchToCalendar }: PlanListProps) {
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'single'; id: string } | { type: 'batch' } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ planId: string; rect: DOMRect } | null>(null)
   const [editTarget, setEditTarget] = useState<string | null>(null)
+  const [exportTarget, setExportTarget] = useState<{ planId: string; title: string } | null>(null)
 
   const filteredPlans = useMemo(() => {
     let result = plans
@@ -115,7 +116,7 @@ export default function PlanList({ onSwitchToCalendar }: PlanListProps) {
 
   const handleCreateConfirm = async (title: string, startDate: string, endDate: string | null, planType: PlanType) => {
     const plan = await createPlan(title, startDate, endDate, planType)
-    setActivePlan(plan.id)
+    navPush({ panel: 'planner', subView: 'editor', planId: plan.id })
     setShowCreateDialog(false)
     useToastStore.getState().show('新建计划成功')
   }
@@ -125,8 +126,7 @@ export default function PlanList({ onSwitchToCalendar }: PlanListProps) {
   }
 
   const handleStartFocusFromPlan = (planId: string) => {
-    setActivePanel('timer')
-    setWindowMode('expanded')
+    navPush({ panel: 'timer' })
     useTimerStore.setState({ pendingStartPlanId: planId })
   }
 
@@ -147,6 +147,38 @@ export default function PlanList({ onSwitchToCalendar }: PlanListProps) {
       setEditMode(false)
     }
     setDeleteTarget(null)
+  }
+
+  const handleExportPdf = async (planId: string, mode: ExportMode) => {
+    const plan = plans.find((p) => p.id === planId)
+    if (!plan) return
+    try {
+      const content = await loadPlanContent(planId)
+      const html = await buildExportHtml({
+        content: content || '',
+        mdFilePath: plan.filePath,
+        title: plan.title,
+        mode,
+        fileName: `${plan.title}.pdf`,
+        meta: {
+          tags: plan.tags,
+          createdAt: plan.createdAt?.slice(0, 10),
+          planType: plan.planType,
+          startDate: plan.startDate,
+          endDate: plan.endDate,
+        },
+      })
+      const result = await pdfExport.generate(html, `${plan.title}.pdf`)
+      setExportTarget(null)
+      if (result.success && 'filePath' in result) {
+        useToastStore.getState().show('PDF 导出成功')
+      } else if (!result.success) {
+        useToastStore.getState().show('导出失败: ' + result.error)
+      }
+    } catch (err: any) {
+      setExportTarget(null)
+      useToastStore.getState().show('导出失败: ' + (err.message || String(err)))
+    }
   }
 
   if (!loaded) {
@@ -215,7 +247,7 @@ export default function PlanList({ onSwitchToCalendar }: PlanListProps) {
             onSortByChange={setSortBy}
             viewMode={viewMode}
             onViewModeChange={(mode) => {
-              if (mode === 'calendar') onSwitchToCalendar()
+              if (mode === 'calendar') navPush({ panel: 'planner', subView: 'calendar' })
               else setViewMode(mode)
             }}
             editMode={editMode}
@@ -254,7 +286,10 @@ export default function PlanList({ onSwitchToCalendar }: PlanListProps) {
               searchQuery={searchQuery || undefined}
               onFocusClick={handleStartFocusFromPlan}
               onMoreClick={(planId, rect) => setContextMenu({ planId, rect })}
-              onClick={setActivePlan}
+              onClick={(id) => {
+                usePlanStore.getState().openTab(id)
+                navPush({ panel: 'planner', subView: 'editor', planId: id })
+              }}
               onToggleSelect={toggleSelect}
             />
           ))
@@ -332,12 +367,32 @@ export default function PlanList({ onSwitchToCalendar }: PlanListProps) {
         <ContextMenu
           items={[
             { label: '开始专注', icon: <Timer size={13} />, textColor: '#FF9F0A', hoverColor: 'rgba(255,159,10,0.1)', onClick: () => handleStartFocusFromPlan(contextMenu.planId) },
-            { label: '查看详情', icon: <FileText size={13} />, onClick: () => setActivePlan(contextMenu.planId) },
+            { label: '查看详情', icon: <FileText size={13} />, onClick: () => navPush({ panel: 'planner', subView: 'editor', planId: contextMenu.planId }) },
+            { label: '导出 PDF', icon: <Download size={13} />, onClick: () => {
+              const plan = plans.find((p) => p.id === contextMenu.planId)
+              if (plan) setExportTarget({ planId: contextMenu.planId, title: plan.title })
+              setContextMenu(null)
+            }},
             { label: '编辑类型和时间', icon: <CalendarRange size={13} />, onClick: () => setEditTarget(contextMenu.planId) },
+            { label: '复制计划', icon: <Copy size={13} />, onClick: async () => {
+              const newPlan = await duplicatePlan(contextMenu.planId)
+              setContextMenu(null)
+              navPush({ panel: 'planner', subView: 'editor', planId: newPlan.id })
+              useToastStore.getState().show('复制计划成功')
+            }},
             { label: '删除计划', icon: <Trash2 size={13} />, danger: true, onClick: () => handleSingleDelete(contextMenu.planId) },
           ]}
           anchorRect={contextMenu.rect}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Export dialog */}
+      {exportTarget && (
+        <ExportDialog
+          open
+          onClose={() => setExportTarget(null)}
+          onExport={(mode) => handleExportPdf(exportTarget.planId, mode)}
         />
       )}
 
