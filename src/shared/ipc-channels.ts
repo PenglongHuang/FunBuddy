@@ -41,4 +41,15 @@ export const IPC = {
   PET_SET_DRAGGING: 'pet:setDragging',
   QUICK_NOTE_SAVED: 'quick-note:saved',
   NAVIGATE_TO_NOTE: 'navigate:toNote',
+
+  // Image
+  IMAGE_SAVE: 'image:save',
+  IMAGE_PICK_AND_SAVE: 'image:pickAndSave',
+  IMAGE_DELETE: 'image:delete',
+  IMAGE_CLEANUP: 'image:cleanup',
+  IMAGE_READ_AS_DATA_URL: 'image:readAsDataUrl',
+  IMAGE_MOVE_ASSETS: 'image:moveAssets',
+
+  // PDF
+  EXPORT_PDF: 'export:pdf',
 } as const

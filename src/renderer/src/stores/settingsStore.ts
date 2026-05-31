@@ -13,6 +13,8 @@ interface AppSettings {
   autoStart: boolean
   closeToTray: boolean
   quickCaptureHotkey: string
+  maxTabsPerPanel: number
+  navHistoryLimit: number
 }
 
 interface SettingsState {
@@ -32,7 +34,7 @@ export const useSettingsStore = create<SettingsState>()(
     storageDir: '',
     storageDirHistory: [],
     pomodoro: { focusDuration: 25, shortBreak: 5, longBreak: 15, roundsBeforeLongBreak: 4 },
-    app: { autoStart: false, closeToTray: true, quickCaptureHotkey: 'Ctrl+Shift+N' },
+    app: { autoStart: false, closeToTray: true, quickCaptureHotkey: 'Ctrl+Shift+N', maxTabsPerPanel: 20, navHistoryLimit: 100 },
     loaded: false,
 
     load: async () => {

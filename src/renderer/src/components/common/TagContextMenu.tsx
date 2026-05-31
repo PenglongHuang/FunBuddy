@@ -38,7 +38,10 @@ export default function TagContextMenu({
       }
     }
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     document.addEventListener('keydown', handleEscape)
@@ -97,7 +100,10 @@ export default function TagContextMenu({
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleRenameConfirm()
-              if (e.key === 'Escape') onClose()
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+                onClose()
+              }
             }}
             style={{
               flex: 1,

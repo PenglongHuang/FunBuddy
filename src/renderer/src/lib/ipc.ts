@@ -112,3 +112,23 @@ export const windowModeEvents = {
   onSetWindowMode: (callback: (mode: 'pet' | 'expanded') => void) =>
     window.api.onSetWindowMode((mode) => callback(mode as 'pet' | 'expanded')),
 }
+
+export const imageApi = {
+  save: (mdFilePath: string, imageData: ArrayBuffer, ext: string, altName?: string) =>
+    window.api.imageSave(mdFilePath, imageData, ext, altName),
+  pickAndSave: (mdFilePath: string) =>
+    window.api.imagePickAndSave(mdFilePath),
+  deleteImage: (mdFilePath: string, imageFileName: string) =>
+    window.api.imageDelete(mdFilePath, imageFileName),
+  cleanup: (mdFilePath: string) =>
+    window.api.imageCleanup(mdFilePath),
+  readAsDataUrl: (mdFilePath: string, imageFileName: string, maxWidth?: number) =>
+    window.api.imageReadAsDataUrl(mdFilePath, imageFileName, maxWidth),
+  moveAssets: (oldMdFilePath: string, newMdFilePath: string) =>
+    window.api.imageMoveAssets(oldMdFilePath, newMdFilePath),
+}
+
+export const pdfExport = {
+  generate: (html: string, fileName: string, defaultPath?: string) =>
+    window.api.exportPdf(html, fileName, defaultPath),
+}

@@ -17,6 +17,8 @@ interface PetStore {
   setPetHovered: (v: boolean) => void
   isPinned: boolean
   togglePinned: () => void
+  timerBubblePinned: boolean
+  setTimerBubblePinned: (v: boolean) => void
 }
 
 export const usePetStore = create<PetStore>((set, get) => ({
@@ -33,6 +35,8 @@ export const usePetStore = create<PetStore>((set, get) => ({
   petHovered: false,
   setPetHovered: (v) => set({ petHovered: v }),
   isPinned: false,
+  timerBubblePinned: false,
+  setTimerBubblePinned: (v) => set({ timerBubblePinned: v }),
   togglePinned: () => {
     const next = !get().isPinned
     set({ isPinned: next })

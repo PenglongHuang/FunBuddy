@@ -47,3 +47,5 @@ plans/
 yarn-debug.log*
 yarn-error.log*
 .superpowers/
+.superpowers/
+.superpowers/

@@ -13,6 +13,7 @@ import {
 import { useTimerStore } from '@/stores/timerStore'
 import { windowApi } from '@/lib/ipc'
 import { formatTime } from '@/lib/time-utils'
+import { Pause, Play, Pin, PinOff } from 'lucide-react'
 
 const STAR_PATH = 'M122 52Q128 40 134 52L155 95L204 99Q218 100 208 109L172 142L182 191Q185 205 172 197L128 170L84 197Q71 205 74 191L84 142L48 109Q38 100 52 99L101 95Z'
 
@@ -29,6 +30,7 @@ export default function PetAvatar({ size = 100, onClick, className = '', showTim
   const petHovered = usePetStore((s) => s.petHovered)
   const timerStatus = useTimerStore((s) => s.status)
   const isTimerRunning = timerStatus === 'running'
+  const timerBubblePinned = usePetStore((s) => s.timerBubblePinned)
   const [hoverAnim, setHoverAnim] = useState<HoverAnimation | null>(null)
   const [isMouseOver, setIsMouseOver] = useState(false)
 
@@ -119,67 +121,77 @@ export default function PetAvatar({ size = 100, onClick, className = '', showTim
     : 'wiggle'
 
   const isHovered = hoverAnim !== null
-  const showTimerBubble = showTimer && isTimerRunning && (isMouseOver || petHovered)
+  const isTimerActive = timerStatus === 'running' || timerStatus === 'paused'
+  const showTimerBubble = showTimer && isTimerActive && (timerBubblePinned || isMouseOver || petHovered)
 
   return (
-    <motion.div
-      className={className}
-      style={{ width: size, height: size, cursor: 'pointer', userSelect: 'none', position: 'relative', overflow: 'visible' }}
-      variants={containerVariants}
-      animate={isHovered ? 'hovered' : 'idle'}
-      transition={containerTransition}
+    <div
+      style={{ position: 'relative', overflow: 'visible' }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      onClick={() => { touch(); onClick?.() }}
     >
       <motion.div
-        variants={bodyVariants}
-        animate={activeBodyVariant}
-        transition={hoverAnim ? undefined : wiggleTransition}
-        onAnimationComplete={hoverAnim ? handleAnimComplete : undefined}
-        style={{ width: '100%', height: '100%', transformOrigin: 'center center' }}
+        className={className}
+        style={{ width: size, height: size, cursor: 'pointer', userSelect: 'none' }}
+        variants={containerVariants}
+        animate={isHovered ? 'hovered' : 'idle'}
+        transition={containerTransition}
+        onClick={() => { touch(); onClick?.() }}
       >
-        <svg viewBox="0 0 256 256" width={size} height={size}>
-          <defs>
-            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#FFF8E7" />
-              <stop offset="50%" stopColor="#FFE082" />
-              <stop offset="100%" stopColor="#FFD54F" />
-            </linearGradient>
-            <filter id={shadowId} x="-30%" y="-30%" width="160%" height="160%">
-              <feDropShadow dx="0" dy="3" stdDeviation="6" floodColor="#000" floodOpacity="0.2" />
-            </filter>
-            <filter id={shadowHoverId} x="-30%" y="-30%" width="160%" height="160%">
-              <feDropShadow dx="0" dy="3" stdDeviation="10" floodColor="#FFD54F" floodOpacity="0.4" />
-            </filter>
-          </defs>
+        <motion.div
+          variants={bodyVariants}
+          animate={activeBodyVariant}
+          transition={hoverAnim ? undefined : wiggleTransition}
+          onAnimationComplete={hoverAnim ? handleAnimComplete : undefined}
+          style={{ width: '100%', height: '100%', transformOrigin: 'center center' }}
+        >
+          <svg viewBox="0 0 256 256" width={size} height={size}>
+            <defs>
+              <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#FFF8E7" />
+                <stop offset="50%" stopColor="#FFE082" />
+                <stop offset="100%" stopColor="#FFD54F" />
+              </linearGradient>
+              <filter id={shadowId} x="-30%" y="-30%" width="160%" height="160%">
+                <feDropShadow dx="0" dy="3" stdDeviation="6" floodColor="#000" floodOpacity="0.2" />
+              </filter>
+              <filter id={shadowHoverId} x="-30%" y="-30%" width="160%" height="160%">
+                <feDropShadow dx="0" dy="3" stdDeviation="10" floodColor="#FFD54F" floodOpacity="0.4" />
+              </filter>
+            </defs>
 
-          <path
-            d={STAR_PATH}
-            fill={`url(#${gradId})`}
-            filter={`url(#${isHovered ? shadowHoverId : shadowId})`}
-            stroke="#FFD54F"
-            strokeWidth="2"
-            strokeLinejoin="round"
-          />
+            <path
+              d={STAR_PATH}
+              fill={`url(#${gradId})`}
+              filter={`url(#${isHovered ? shadowHoverId : shadowId})`}
+              stroke="#FFD54F"
+              strokeWidth="2"
+              strokeLinejoin="round"
+            />
 
-          {renderEyes(displayState, isBlinking)}
+            {renderEyes(displayState, isBlinking)}
 
-          {hoverAnim === 'think' && !isTimerRunning && <ThoughtBubble />}
+            {hoverAnim === 'think' && !isTimerRunning && <ThoughtBubble />}
 
-          {hoverAnim === 'heart' && <HeartOverlay />}
+            {hoverAnim === 'heart' && <HeartOverlay />}
 
-          {hoverAnim === 'firework' && <FireworkOverlay />}
+            {hoverAnim === 'firework' && <FireworkOverlay />}
 
-          {hoverAnim === 'cute' && <CuteOverlay />}
-        </svg>
+            {hoverAnim === 'cute' && <CuteOverlay />}
+          </svg>
+        </motion.div>
       </motion.div>
       <AnimatePresence>
         {showTimerBubble && (
           <FocusBubble size={size} />
         )}
       </AnimatePresence>
-    </motion.div>
+      <AnimatePresence>
+        {showTimerBubble && (
+          <ActionBubble />
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
@@ -333,6 +345,7 @@ function FocusBubble({ size }: { size: number }) {
   const remainingMs = useTimerStore((s) => s.remainingMs)
   const totalMs = useTimerStore((s) => s.totalMs)
   const phase = useTimerStore((s) => s.phase)
+  const timerStatus = useTimerStore((s) => s.status)
   const progress = totalMs > 0 ? remainingMs / totalMs : 1
   const timeStr = formatTime(remainingMs)
   const R = 17
@@ -342,7 +355,10 @@ function FocusBubble({ size }: { size: number }) {
   const ringPx = above ? 44 : 34
   const cx = 26
   const vb = cx * 2
-  const colors = PHASE_COLORS[phase]
+  const phaseColors = PHASE_COLORS[phase]
+  const colors = timerStatus === 'paused'
+    ? { stroke: '#9E9E9E', bg: 'rgba(158,158,158,0.25)', text: '#616161' }
+    : phaseColors
 
   return (
     <div
@@ -396,6 +412,92 @@ function FocusBubble({ size }: { size: number }) {
             {timeStr}
           </text>
         </svg>
+      </motion.div>
+    </div>
+  )
+}
+
+function ActionBubble() {
+  const timerStatus = useTimerStore((s) => s.status)
+  const timerBubblePinned = usePetStore((s) => s.timerBubblePinned)
+  const isRunning = timerStatus === 'running'
+
+  const handleTogglePause = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (isRunning) {
+      useTimerStore.getState().pause()
+    } else {
+      useTimerStore.getState().resume()
+    }
+  }, [isRunning])
+
+  const handleTogglePin = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    usePetStore.getState().setTimerBubblePinned(!timerBubblePinned)
+  }, [timerBubblePinned])
+
+  return (
+    <div
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        position: 'absolute',
+        top: '100%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        marginTop: 4,
+        pointerEvents: 'auto',
+        zIndex: 10,
+      }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: -5, scale: 0.85 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -5, scale: 0.85 }}
+        transition={{ duration: 0.25 }}
+        style={{
+          display: 'flex',
+          gap: 6,
+          background: 'rgba(255,255,255,0.15)',
+          backdropFilter: 'blur(12px)',
+          borderRadius: 20,
+          padding: '4px 8px',
+          alignItems: 'center',
+        }}
+      >
+        <button
+          onClick={handleTogglePause}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            border: 'none',
+            background: 'rgba(255,255,255,0.2)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+          }}
+        >
+          {isRunning ? <Pause size={14} /> : <Play size={14} />}
+        </button>
+        <button
+          onClick={handleTogglePin}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            border: 'none',
+            background: timerBubblePinned ? 'rgba(255,213,79,0.4)' : 'rgba(255,255,255,0.2)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+          }}
+        >
+          {timerBubblePinned ? <PinOff size={14} /> : <Pin size={14} />}
+        </button>
       </motion.div>
     </div>
   )

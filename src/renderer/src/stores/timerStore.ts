@@ -34,6 +34,9 @@ interface TimerStore {
   setPendingPlanId: (id: string | null) => void
   startWithPlan: (planId: string) => void
   getPlanFocusMinutes: (planId: string) => number
+  updateHistoryEntry: (id: string, updates: { completedAt?: string; durationMinutes?: number; planId?: string | null }) => void
+  deleteHistoryEntry: (id: string) => void
+  _recalcTodayStats: () => void
 }
 
 export const useTimerStore = create<TimerStore>()(
@@ -92,6 +95,7 @@ export const useTimerStore = create<TimerStore>()(
     reset: () => {
       set((s) => { s.status = 'idle'; s.remainingMs = 0; s.totalMs = 0; s._persistVersion++ })
       usePetStore.getState().setState('smile')
+      usePetStore.getState().setTimerBubblePinned(false)
       get()._persist()
     },
 
@@ -119,6 +123,7 @@ export const useTimerStore = create<TimerStore>()(
         const actualMinutes = Math.max(1, Math.round((totalMs - remainingMs) / 60000))
         set((s) => { s.todayCount++; s.todayMinutes += actualMinutes })
         const entry: TimerHistoryEntry = {
+          id: crypto.randomUUID(),
           completedAt: new Date().toISOString(),
           phase: 'focus',
           durationMinutes: actualMinutes,
@@ -133,6 +138,7 @@ export const useTimerStore = create<TimerStore>()(
       }
 
       usePetStore.getState().setState('doubleWink')
+      usePetStore.getState().setTimerBubblePinned(false)
       fireConfetti()
       notify.show('FunBuddy', phase === 'focus' ? '专注完成！休息一下吧' : '休息结束，继续加油！')
 
@@ -191,7 +197,7 @@ export const useTimerStore = create<TimerStore>()(
           const nextPhase: TimerPhase = newRound % settings.roundsBeforeLongBreak === 0
             ? 'longBreak' : 'shortBreak'
           const history = await store.get<{ completedAt: string; phase: 'focus'; durationMinutes: number }[]>('timerHistory') || []
-          history.push({ completedAt: new Date().toISOString(), phase: 'focus', durationMinutes: settings.focusDuration })
+          history.push({ id: crypto.randomUUID(), completedAt: new Date().toISOString(), phase: 'focus', durationMinutes: settings.focusDuration })
           await store.set('timerHistory', history)
           await store.set('timer', { status: 'idle', phase: nextPhase, remainingMs: 0, totalMs: 0, timestamp: '', round: newRound })
         } else {
@@ -215,13 +221,19 @@ export const useTimerStore = create<TimerStore>()(
     _loadHistory: async () => {
       const history = await store.get<TimerHistoryEntry[]>('timerHistory')
       if (!history) return
+      // Migrate legacy entries without id
+      let needsPersist = false
+      for (const entry of history) {
+        if (!entry.id) {
+          entry.id = crypto.randomUUID()
+          needsPersist = true
+        }
+      }
+      if (needsPersist) {
+        await store.set('timerHistory', history)
+      }
       set({ history })
-      const today = new Date().toISOString().split('T')[0]
-      const todayEntries = history.filter((h) => h.completedAt.startsWith(today))
-      set({
-        todayCount: todayEntries.length,
-        todayMinutes: todayEntries.reduce((sum, h) => sum + h.durationMinutes, 0),
-      })
+      get()._recalcTodayStats()
     },
 
     setPendingPlanId: (id) => set({ pendingPlanId: id }),
@@ -229,6 +241,43 @@ export const useTimerStore = create<TimerStore>()(
     startWithPlan: (planId) => {
       set({ pendingPlanId: planId, lastSelectedPlanId: planId })
       get().start()
+    },
+
+    updateHistoryEntry: (id, updates) => {
+      set((s) => {
+        const entry = s.history.find((h) => h.id === id)
+        if (!entry) return
+        if (updates.completedAt !== undefined) entry.completedAt = updates.completedAt
+        if (updates.durationMinutes !== undefined) entry.durationMinutes = updates.durationMinutes
+        if (updates.planId !== undefined) {
+          if (updates.planId === null) {
+            delete entry.planId
+          } else {
+            entry.planId = updates.planId
+          }
+        }
+      })
+      const history = get().history
+      store.set('timerHistory', [...history])
+      get()._recalcTodayStats()
+    },
+
+    deleteHistoryEntry: (id) => {
+      set((s) => {
+        s.history = s.history.filter((h) => h.id !== id)
+      })
+      const history = get().history
+      store.set('timerHistory', [...history])
+      get()._recalcTodayStats()
+    },
+
+    _recalcTodayStats: () => {
+      const today = new Date().toISOString().split('T')[0]
+      const todayEntries = get().history.filter((h) => h.completedAt.startsWith(today))
+      set({
+        todayCount: todayEntries.length,
+        todayMinutes: todayEntries.reduce((sum, h) => sum + h.durationMinutes, 0),
+      })
     },
 
     getPlanFocusMinutes: (planId) => {

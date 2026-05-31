@@ -1,7 +1,7 @@
 import type { HoverAnimation } from '@/types/pet'
 import type { Variants, Transition } from 'motion/react'
 
-export const HOVER_ANIMATIONS: HoverAnimation[] = ['spin', 'stretch', 'think', 'bounce', 'heart', 'firework', 'cute']
+export const HOVER_ANIMATIONS: HoverAnimation[] = ['spin', 'stretch', 'think', 'bounce', 'heart', 'firework', 'cute', 'tumble', 'squish', 'jump', 'shake', 'dance']
 
 export function pickRandomHover(last?: HoverAnimation | null): HoverAnimation {
   const candidates = last ? HOVER_ANIMATIONS.filter((a) => a !== last) : HOVER_ANIMATIONS
@@ -67,6 +67,34 @@ export const bodyVariants: Variants = {
     scaleY: [1, 1.08, 1],
     scaleX: [1, 0.94, 1],
     transition: { duration: 1.5, ease: 'easeInOut' },
+  },
+  tumble: {
+    rotate: [0, 360],
+    scaleY: [1, 0.85, 1],
+    transition: { duration: 0.9, ease: 'easeInOut' },
+  },
+  squish: {
+    scaleY: [1, 0.6, 1.15, 0.95, 1],
+    scaleX: [1, 1.2, 0.9, 1.05, 1],
+    y: [0, 10, -5, 2, 0],
+    transition: { duration: 1.0, ease: 'easeInOut' },
+  },
+  jump: {
+    y: [0, -30, 0],
+    rotate: [0, -5, 5, 0],
+    scaleY: [1, 0.9, 1.05, 1],
+    transition: { duration: 0.7, ease: 'easeOut' },
+  },
+  shake: {
+    x: [0, -8, 8, -6, 6, -3, 3, 0],
+    rotate: [0, -3, 3, -2, 2, -1, 1, 0],
+    transition: { duration: 0.6, ease: 'easeInOut' },
+  },
+  dance: {
+    rotate: [0, 10, -10, 8, -8, 0],
+    y: [0, -8, 0, -8, 0],
+    scaleX: [1, 0.95, 1.05, 0.95, 1],
+    transition: { duration: 1.4, ease: 'easeInOut' },
   },
 }
 

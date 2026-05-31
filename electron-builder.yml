@@ -6,6 +6,7 @@ directories:
 files:
   - out/**/*
   - resources/**/*
+  - node_modules/sharp/**/*
 forceCodeSigning: false
 win:
   target:

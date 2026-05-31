@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNoteStore } from '@/stores/noteStore'
-import { Plus, Trash2, CheckSquare, Square, FileText } from 'lucide-react'
+import { useNavigationStore } from '@/stores/navigationStore'
+import { Plus, Trash2, CheckSquare, Square, FileText, Download, Copy } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useToastStore } from '@/stores/toastStore'
 import NoteEditor from './NoteEditor'
@@ -8,6 +9,9 @@ import { Button, ContextMenu, ConfirmDialog } from '@/components/ui'
 import SearchBar from '@/components/common/SearchBar'
 import NoteToolbar from './NoteToolbar'
 import NoteCard from './NoteCard'
+import ExportDialog from '@/components/common/ExportDialog'
+import { buildExportHtml, type ExportMode } from '@/lib/export-pdf'
+import { pdfExport } from '@/lib/ipc'
 
 export default function NotesPanel() {
   const notes = useNoteStore((s) => s.notes)
@@ -17,7 +21,13 @@ export default function NotesPanel() {
   const createNote = useNoteStore((s) => s.createNote)
   const deleteNote = useNoteStore((s) => s.deleteNote)
   const deleteNotes = useNoteStore((s) => s.deleteNotes)
+  const duplicateNote = useNoteStore((s) => s.duplicateNote)
   const setActiveNote = useNoteStore((s) => s.setActiveNote)
+  const loadNoteContent = useNoteStore((s) => s.loadNoteContent)
+  const navPush = useNavigationStore((s) => s.push)
+
+  const tabs = useNoteStore((s) => s.tabs)
+  const activeTabId = useNoteStore((s) => s.activeTabId)
 
   const sortBy = useNoteStore((s) => s.sortBy)
   const viewMode = useNoteStore((s) => s.viewMode)
@@ -29,6 +39,7 @@ export default function NotesPanel() {
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'single' | 'batch'; id?: string } | null>(null)
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ noteId: string; rect: DOMRect } | null>(null)
+  const [exportTarget, setExportTarget] = useState<{ noteId: string; title: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => { load() }, [load])
@@ -62,7 +73,7 @@ export default function NotesPanel() {
 
   const handleCreate = async () => {
     const note = await createNote('新笔记')
-    setActiveNote(note.id)
+    navPush({ panel: 'notes', subView: 'editor', noteId: note.id })
     useToastStore.getState().show('新建笔记成功')
   }
 
@@ -113,6 +124,35 @@ export default function NotesPanel() {
     setDeleteTarget(null)
   }
 
+  const handleExportPdf = async (noteId: string, mode: ExportMode) => {
+    const note = notes.find((n) => n.id === noteId)
+    if (!note) return
+    try {
+      const content = await loadNoteContent(noteId)
+      const html = await buildExportHtml({
+        content: content || '',
+        mdFilePath: note.filePath,
+        title: note.title,
+        mode,
+        fileName: `${note.title}.pdf`,
+        meta: {
+          tags: note.tags,
+          createdAt: note.createdAt?.slice(0, 10),
+        },
+      })
+      const result = await pdfExport.generate(html, `${note.title}.pdf`)
+      setExportTarget(null)
+      if (result.success && 'filePath' in result) {
+        useToastStore.getState().show('PDF 导出成功')
+      } else if (!result.success) {
+        useToastStore.getState().show('导出失败: ' + result.error)
+      }
+    } catch (err: any) {
+      setExportTarget(null)
+      useToastStore.getState().show('导出失败: ' + (err.message || String(err)))
+    }
+  }
+
 
 
   const exitEditMode = () => {
@@ -128,7 +168,7 @@ export default function NotesPanel() {
     )
   }
 
-  if (activeNoteId) {
+  if (tabs.length > 0 && activeTabId) {
     return <NoteEditor />
   }
 
@@ -229,7 +269,10 @@ export default function NotesPanel() {
               editMode={editMode}
               searchQuery={searchQuery || undefined}
               onMoreClick={(noteId, rect) => setContextMenu({ noteId, rect })}
-              onClick={setActiveNote}
+              onClick={(id) => {
+                useNoteStore.getState().openTab(id)
+                navPush({ panel: 'notes', subView: 'editor', noteId: id })
+              }}
               onToggleSelect={toggleSelect}
             />
           ))
@@ -296,11 +339,38 @@ export default function NotesPanel() {
       {contextMenu && (
         <ContextMenu
           items={[
-            { label: '查看详情', icon: <FileText size={13} />, onClick: () => setActiveNote(contextMenu.noteId) },
+            { label: '查看详情', icon: <FileText size={13} />, onClick: () => navPush({ panel: 'notes', subView: 'editor', noteId: contextMenu.noteId }) },
+            {
+              label: '导出 PDF',
+              icon: <Download size={13} />,
+              onClick: () => {
+                const note = notes.find((n) => n.id === contextMenu.noteId)
+                if (note) setExportTarget({ noteId: contextMenu.noteId, title: note.title })
+                setContextMenu(null)
+              },
+            },
+            {
+              label: '复制笔记',
+              icon: <Copy size={13} />,
+              onClick: async () => {
+                const newNote = await duplicateNote(contextMenu.noteId)
+                setContextMenu(null)
+                navPush({ panel: 'notes', subView: 'editor', noteId: newNote.id })
+                useToastStore.getState().show('复制笔记成功')
+              },
+            },
             { label: '删除笔记', icon: <Trash2 size={13} />, danger: true, onClick: () => setDeleteTarget({ type: 'single', id: contextMenu.noteId }) },
           ]}
           anchorRect={contextMenu.rect}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {exportTarget && (
+        <ExportDialog
+          open
+          onClose={() => setExportTarget(null)}
+          onExport={(mode) => handleExportPdf(exportTarget.noteId, mode)}
         />
       )}
     </div>

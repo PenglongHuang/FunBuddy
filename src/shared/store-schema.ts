@@ -11,6 +11,8 @@ export interface StoreSchema {
       autoStart: boolean
       closeToTray: boolean
       quickCaptureHotkey: string
+      maxTabsPerPanel: number
+      navHistoryLimit: number
     }
     storageDirHistory: string[]
   }
@@ -37,7 +39,7 @@ export const storeDefaults: StoreSchema = {
   settings: {
     storageDir: '',
     pomodoro: { focusDuration: 25, shortBreak: 5, longBreak: 15, roundsBeforeLongBreak: 4 },
-    app: { autoStart: false, closeToTray: true, quickCaptureHotkey: 'Ctrl+Shift+N' },
+    app: { autoStart: false, closeToTray: true, quickCaptureHotkey: 'Ctrl+Shift+N', maxTabsPerPanel: 20, navHistoryLimit: 100 },
     storageDirHistory: [],
   },
   timer: { status: 'idle', phase: 'focus', remainingMs: 0, totalMs: 0, timestamp: '', round: 0 },

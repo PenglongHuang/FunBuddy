@@ -1,11 +1,14 @@
-import { ipcMain, Notification, dialog, screen, app } from 'electron'
-import { readFile, writeFile, unlink, readdir, mkdir } from 'fs/promises'
+import { ipcMain, Notification, dialog, screen, app, BrowserWindow } from 'electron'
+import { readFile, writeFile, unlink, readdir, mkdir, rm, cp } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join, dirname } from 'path'
+import { join, dirname, resolve, parse as parsePath } from 'path'
+import { tmpdir } from 'os'
 import { getStore } from './store'
 import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode, startPetCursorTracking, stopPetCursorTracking, setPetDragging, movePetDrag, toggleAlwaysOnTop } from './window'
 import { IPC } from '../shared/ipc-channels'
 import { registerHotkeys } from './hotkey'
+import { nanoid } from 'nanoid'
+import sharp from 'sharp'
 
 export function registerIpcHandlers(): void {
   const store = getStore()
@@ -14,6 +17,26 @@ export function registerIpcHandlers(): void {
     const configured = store.get('settings.storageDir') as string
     if (configured) return configured
     return join(app.getPath('userData'), 'funbuddy-workspace')
+  }
+
+  const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
+  const IMAGE_MAX_SIZE = 10 * 1024 * 1024
+
+  const dataUrlCache = new Map<string, { dataUrl: string; mimeType: string }>()
+
+  function validatePath(dir: string, filePath: string): string {
+    const fullPath = resolve(dir, filePath)
+    if (!fullPath.startsWith(resolve(dir))) {
+      throw new Error('Invalid path')
+    }
+    return fullPath
+  }
+
+  function getAssetsDir(mdFilePath: string): { dir: string; assetsDir: string } {
+    const dir = getStorageDir()
+    const normalized = mdFilePath.replace(/\\/g, '/')
+    const category = normalized.startsWith('notes/') ? 'notes' : 'plans'
+    return { dir, assetsDir: join(dir, category, 'assets', 'imgs') }
   }
 
   // Store
@@ -229,6 +252,46 @@ export function registerIpcHandlers(): void {
     return writeFile(filePath, content, 'utf-8')
   })
 
+  // PDF export
+  ipcMain.handle(
+    IPC.EXPORT_PDF,
+    async (_e, html: string, fileName: string, defaultPath?: string) => {
+      let win: BrowserWindow | null = null
+      let tmpFile = ''
+      try {
+        win = new BrowserWindow({ width: 800, height: 1200, show: false, webPreferences: { offscreen: true } })
+        tmpFile = join(tmpdir(), `funbuddy-export-${nanoid(8)}.html`)
+        await writeFile(tmpFile, html, 'utf-8')
+        await win.loadURL(`file://${tmpFile}`)
+        await new Promise(resolve => setTimeout(resolve, 500))
+
+        const pdfBytes = await win.webContents.printToPDF({
+          pageSize: 'A4',
+          printBackground: true,
+        })
+
+        const saveResult = await withForegroundDialog(() =>
+          dialog.showSaveDialog({
+            defaultPath: defaultPath || fileName,
+            filters: [{ name: 'PDF', extensions: ['pdf'] }],
+          }),
+        )
+
+        if (saveResult.canceled || !saveResult.filePath) {
+          return { success: true as const }
+        }
+
+        await writeFile(saveResult.filePath, Buffer.from(pdfBytes))
+        return { success: true as const, filePath: saveResult.filePath }
+      } catch (err: any) {
+        return { success: false as const, error: err.message || String(err) }
+      } finally {
+        win?.destroy()
+        if (tmpFile) { unlink(tmpFile).catch(() => {}) }
+      }
+    },
+  )
+
   // Auto-launch
   ipcMain.handle(IPC.AUTOLAUNCH_ENABLE, () => {
     app.setLoginItemSettings({ openAtLogin: true })
@@ -274,5 +337,126 @@ export function registerIpcHandlers(): void {
     } else {
       send()
     }
+  })
+
+  // === Image handlers ===
+
+  ipcMain.handle(IPC.IMAGE_SAVE, async (_e, mdFilePath: string, imageData: ArrayBuffer, ext: string, _altName?: string) => {
+    if (!IMAGE_EXTENSIONS.includes(ext.toLowerCase())) {
+      throw new Error(`Unsupported image format: ${ext}`)
+    }
+
+    const { assetsDir } = getAssetsDir(mdFilePath)
+    await mkdir(assetsDir, { recursive: true })
+
+    const buffer = Buffer.from(imageData)
+    if (buffer.length > IMAGE_MAX_SIZE) {
+      throw new Error('Image exceeds 10MB limit')
+    }
+
+    let format: string
+    try {
+      const meta = await sharp(buffer).metadata()
+      if (!meta.format) throw new Error('No format')
+      format = meta.format
+    } catch {
+      throw new Error('Invalid image data')
+    }
+
+    const actualExt = format === 'jpeg' ? 'jpg' : format
+    const ts = new Date().toISOString().replace(/[-T:.Z]/g, '').slice(0, 14)
+    const fileName = `${ts}-${nanoid(4)}.${actualExt}`
+    await writeFile(join(assetsDir, fileName), buffer)
+
+    const relativePath = `./assets/imgs/${fileName}`
+    return { relativePath, fileName }
+  })
+
+  ipcMain.handle(IPC.IMAGE_PICK_AND_SAVE, async (_e, mdFilePath: string) => {
+    const result = await withForegroundDialog(() =>
+      dialog.showOpenDialog({
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'Images', extensions: IMAGE_EXTENSIONS }],
+      })
+    )
+    if (result.canceled || result.filePaths.length === 0) return null
+
+    const { assetsDir } = getAssetsDir(mdFilePath)
+    await mkdir(assetsDir, { recursive: true })
+
+    const saved = await Promise.all(result.filePaths.map(async (srcPath) => {
+      const ext = srcPath.split('.').pop()?.toLowerCase() || 'png'
+      const ts = new Date().toISOString().replace(/[-T:.Z]/g, '').slice(0, 14)
+      const fileName = `${ts}-${nanoid(4)}.${ext}`
+      await cp(srcPath, join(assetsDir, fileName))
+      return { relativePath: `./assets/imgs/${fileName}`, fileName }
+    }))
+
+    return saved[0]
+  })
+
+  ipcMain.handle(IPC.IMAGE_DELETE, async () => {
+    // No-op: never delete images
+  })
+
+  ipcMain.handle(IPC.IMAGE_CLEANUP, async () => {
+    // No-op: never delete images
+  })
+
+  ipcMain.handle(IPC.IMAGE_READ_AS_DATA_URL, async (_e, mdFilePath: string, imagePath: string, maxWidth?: number) => {
+    const fileName = imagePath.replace(/\\/g, '/').split('/').pop() || imagePath
+    const cacheKey = `${fileName}:${maxWidth || 0}`
+    const cached = dataUrlCache.get(cacheKey)
+    if (cached) return cached
+
+    const storageDir = getStorageDir()
+    const { assetsDir } = getAssetsDir(mdFilePath)
+    let fullPath = join(assetsDir, fileName)
+
+    // Fallback to other category
+    if (!existsSync(fullPath)) {
+      const normalized = mdFilePath.replace(/\\/g, '/')
+      const otherCategory = normalized.startsWith('notes/') ? 'plans' : 'notes'
+      const fallbackDir = join(storageDir, otherCategory, 'assets', 'imgs')
+      const fallbackPath = join(fallbackDir, fileName)
+      if (existsSync(fallbackPath)) fullPath = fallbackPath
+    }
+
+    if (!resolve(fullPath).startsWith(resolve(storageDir))) {
+      throw new Error('Invalid image path')
+    }
+
+    if (!existsSync(fullPath)) {
+      throw new Error(`Image not found: ${fileName}`)
+    }
+
+    let buffer: Buffer
+    let mimeType: string
+
+    if (maxWidth && maxWidth > 0) {
+      const image = sharp(fullPath)
+      const meta = await image.metadata()
+      if (meta.width && meta.width > maxWidth) {
+        buffer = await image.resize(maxWidth).toBuffer()
+      } else {
+        buffer = await readFile(fullPath) as Buffer
+      }
+      const format = meta.format || 'png'
+      mimeType = `image/${format === 'jpg' ? 'jpeg' : format}`
+    } else {
+      buffer = await readFile(fullPath) as Buffer
+      const meta = await sharp(buffer).metadata()
+      const format = meta.format || 'png'
+      mimeType = `image/${format === 'jpg' ? 'jpeg' : format}`
+    }
+
+    const dataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`
+    const result = { dataUrl, mimeType }
+    dataUrlCache.set(cacheKey, result)
+    return result
+  })
+
+  ipcMain.handle(IPC.IMAGE_MOVE_ASSETS, async () => {
+    // No-op: images are centralized, no per-document dirs to move
   })
 }

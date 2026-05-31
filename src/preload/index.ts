@@ -58,6 +58,26 @@ const api = {
   fsWriteFileAbsolute: (filePath: string, content: string) =>
     ipcRenderer.invoke(IPC.FS_WRITE_FILE_ABSOLUTE, filePath, content) as Promise<void>,
 
+  // Image
+  imageSave: (mdFilePath: string, imageData: ArrayBuffer, ext: string, altName?: string) =>
+    ipcRenderer.invoke(IPC.IMAGE_SAVE, mdFilePath, imageData, ext, altName) as Promise<{ relativePath: string; fileName: string }>,
+  imagePickAndSave: (mdFilePath: string) =>
+    ipcRenderer.invoke(IPC.IMAGE_PICK_AND_SAVE, mdFilePath) as Promise<{ relativePath: string; fileName: string } | null>,
+  imageDelete: (mdFilePath: string, imageFileName: string) =>
+    ipcRenderer.invoke(IPC.IMAGE_DELETE, mdFilePath, imageFileName) as Promise<void>,
+  imageCleanup: (mdFilePath: string) =>
+    ipcRenderer.invoke(IPC.IMAGE_CLEANUP, mdFilePath) as Promise<void>,
+  imageReadAsDataUrl: (mdFilePath: string, imageFileName: string, maxWidth?: number) =>
+    ipcRenderer.invoke(IPC.IMAGE_READ_AS_DATA_URL, mdFilePath, imageFileName, maxWidth) as Promise<{ dataUrl: string; mimeType: string }>,
+  imageMoveAssets: (oldMdFilePath: string, newMdFilePath: string) =>
+    ipcRenderer.invoke(IPC.IMAGE_MOVE_ASSETS, oldMdFilePath, newMdFilePath) as Promise<void>,
+
+  // PDF
+  exportPdf: (html: string, fileName: string, defaultPath?: string) =>
+    ipcRenderer.invoke(IPC.EXPORT_PDF, html, fileName, defaultPath) as Promise<
+      { success: true; filePath: string } | { success: true } | { success: false; error: string }
+    >,
+
   // Auto-launch
   autolaunchEnable: () => ipcRenderer.invoke(IPC.AUTOLAUNCH_ENABLE),
   autolaunchDisable: () => ipcRenderer.invoke(IPC.AUTOLAUNCH_DISABLE),

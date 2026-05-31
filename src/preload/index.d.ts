@@ -39,6 +39,14 @@ export interface FunBuddyAPI {
   quickNoteSaved: (noteId: string) => void
   onNavigateToNote: (callback: (noteId: string) => void) => () => void
   onSetWindowMode: (callback: (mode: string) => void) => () => void
+
+  // Image
+  imageSave: (mdFilePath: string, imageData: ArrayBuffer, ext: string, altName?: string) => Promise<{ relativePath: string; fileName: string }>
+  imagePickAndSave: (mdFilePath: string) => Promise<{ relativePath: string; fileName: string } | null>
+  imageDelete: (mdFilePath: string, imageFileName: string) => Promise<void>
+  imageCleanup: (mdFilePath: string) => Promise<void>
+  imageReadAsDataUrl: (mdFilePath: string, imageFileName: string, maxWidth?: number) => Promise<{ dataUrl: string; mimeType: string }>
+  imageMoveAssets: (oldMdFilePath: string, newMdFilePath: string) => Promise<void>
 }
 
 declare global {

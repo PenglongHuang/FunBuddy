@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { CalendarDays, Timer, FileText, Settings, type LucideIcon } from 'lucide-react'
 import { usePetStore } from '@/stores/petStore'
 import { useTimerStore } from '@/stores/timerStore'
+import { useNavigationStore } from '@/stores/navigationStore'
 
 const PANELS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'planner', label: '计划', icon: CalendarDays },
@@ -12,11 +13,11 @@ const PANELS: { id: string; label: string; icon: LucideIcon }[] = [
 
 export default function DynamicIsland() {
   const activePanel = usePetStore((s) => s.activePanel)
-  const setActivePanel = usePetStore((s) => s.setActivePanel)
   const timerStatus = useTimerStore((s) => s.status)
   const remainingMs = useTimerStore((s) => s.remainingMs)
   const timerPause = useTimerStore((s) => s.pause)
   const timerResume = useTimerStore((s) => s.resume)
+  const navPush = useNavigationStore((s) => s.push)
   const [isExpanded, setIsExpanded] = useState(false)
   const [currentTime, setCurrentTime] = useState('')
   const expandTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
@@ -46,12 +47,18 @@ export default function DynamicIsland() {
   }
 
   const handlePanelClick = (panelId: string) => {
-    setActivePanel(panelId as any)
+    if (panelId === 'planner') {
+      navPush({ panel: 'planner', subView: 'list' })
+    } else if (panelId === 'notes') {
+      navPush({ panel: 'notes', subView: 'list' })
+    } else {
+      navPush({ panel: panelId as any })
+    }
   }
 
   const handleToggleTimer = () => {
     if (activePanel !== 'timer') {
-      setActivePanel('timer')
+      navPush({ panel: 'timer' })
     }
     if (timerStatus === 'running') {
       timerPause()

@@ -31,7 +31,10 @@ export default function Dropdown({ trigger, children, open, onClose }: DropdownP
       onClose()
     }
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
     }
     document.addEventListener('mousedown', handleMouseDown)
     document.addEventListener('keydown', handleKeyDown)

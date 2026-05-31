@@ -11,6 +11,7 @@ interface TagInputProps {
 export default function TagInput({ tags, allTags, onUpdateTags, placeholder = 'æ·»åŠ æ ‡ç­¾...' }: TagInputProps) {
   const [input, setInput] = useState('')
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -96,12 +97,36 @@ export default function TagInput({ tags, allTags, onUpdateTags, placeholder = 'æ
           onChange={(e) => {
             setInput(e.target.value)
             setShowSuggestions(true)
+            setHighlightedIndex(-1)
           }}
           onFocus={() => setShowSuggestions(true)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'ArrowDown') {
               e.preventDefault()
-              addTag(input)
+              if (suggestions.length > 0) {
+                setHighlightedIndex((prev) => (prev + 1) % suggestions.length)
+              }
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              if (suggestions.length > 0) {
+                setHighlightedIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length)
+              }
+            } else if (e.key === 'Escape') {
+              e.stopPropagation()
+              setShowSuggestions(false)
+              setHighlightedIndex(-1)
+            } else if (e.key === 'Enter') {
+              e.preventDefault()
+              if (!input.trim()) {
+                setShowSuggestions(false)
+                setHighlightedIndex(-1)
+                return
+              }
+              if (highlightedIndex >= 0 && highlightedIndex < suggestions.length) {
+                addTag(suggestions[highlightedIndex])
+              } else {
+                addTag(input)
+              }
             } else if (e.key === 'Backspace' && !input && tags.length > 0) {
               removeTag(tags[tags.length - 1])
             }
@@ -135,9 +160,14 @@ export default function TagInput({ tags, allTags, onUpdateTags, placeholder = 'æ
               boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
             }}
           >
-            {suggestions.map((tag) => (
+            {suggestions.map((tag, idx) => (
               <button
                 key={tag}
+                ref={(el) => {
+                  if (idx === highlightedIndex && el) {
+                    el.scrollIntoView({ block: 'nearest' })
+                  }
+                }}
                 onClick={() => addTag(tag)}
                 style={{
                   display: 'flex',
@@ -145,22 +175,16 @@ export default function TagInput({ tags, allTags, onUpdateTags, placeholder = 'æ
                   gap: 6,
                   width: '100%',
                   padding: '6px 10px',
-                  background: 'transparent',
+                  background: idx === highlightedIndex ? 'rgba(138,180,248,0.15)' : 'transparent',
+                  color: idx === highlightedIndex ? '#8ab4f8' : 'var(--text-secondary)',
                   border: 'none',
                   cursor: 'pointer',
                   font: 'var(--text-caption-1)',
-                  color: 'var(--text-secondary)',
                   textAlign: 'left',
                   transition: 'background 0.1s ease',
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(138,180,248,0.1)'
-                  e.currentTarget.style.color = '#8ab4f8'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = 'var(--text-secondary)'
-                }}
+                onMouseEnter={() => setHighlightedIndex(idx)}
+                onMouseLeave={() => setHighlightedIndex(-1)}
               >
                 <svg width="10" height="10" viewBox="0 0 16 16">
                   <circle cx="8" cy="8" r="3" fill="#8ab4f8" />
