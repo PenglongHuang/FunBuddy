@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import { usePlanStore } from '@/stores/planStore'
 import MarkdownEditor from '@/components/common/MarkdownEditor'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
-import { ArrowLeft, Pencil, Eye, MoreVertical, Download, List } from 'lucide-react'
+import SplitPaneLiveEditor from '@/components/common/SplitPaneLiveEditor'
+import { ArrowLeft, Pencil, Eye, Zap, MoreVertical, Download, List } from 'lucide-react'
 import { motion } from 'motion/react'
 import { extractH1Title } from '@/utils/markdown'
 import { useToast } from '@/components/common/Toast'
@@ -61,7 +62,9 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
   const navPush = useNavigationStore((s) => s.push)
 
   const [content, setContent] = useState('')
-  const [editMode, setEditMode] = useState<'edit' | 'preview'>('edit')
+  const [editMode, setEditMode] = useState<'live' | 'edit' | 'preview'>(
+    () => usePlanStore.getState().editorMode
+  )
   const [dirty, setDirty] = useState(false)
   const contentRef = useRef(content)
   contentRef.current = content
@@ -71,7 +74,7 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
 
   const [contextMenuState, setContextMenuState] = useState<{
     anchorRect: DOMRect
-    mode: 'edit' | 'preview'
+    mode: 'edit' | 'live' | 'preview'
     selection: { start: number; end: number } | null
   } | null>(null)
   const [textareaEl, setTextareaEl] = useState<HTMLTextAreaElement | null>(null)
@@ -167,10 +170,10 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
     const ta = e.currentTarget
     setContextMenuState({
       anchorRect: DOMRect.fromRect({ width: 0, height: 0, x: e.clientX, y: e.clientY }),
-      mode: 'edit',
+      mode: editMode === 'live' ? 'live' : 'edit',
       selection: { start: ta.selectionStart, end: ta.selectionEnd },
     })
-  }, [])
+  }, [editMode])
 
   const handlePreviewContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -303,7 +306,7 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
     setCurrentLineIndex(lineIndex)
     if (!editorRef.current) return
 
-    if (editMode === 'edit') {
+    if (editMode === 'edit' || editMode === 'live') {
       const textarea = editorRef.current.querySelector('textarea')
       if (textarea) {
         const lines = content.split('\n')
@@ -370,7 +373,7 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
           <span className="truncate" style={{ font: 'var(--text-headline)', color: 'var(--text-primary)', fontWeight: 600 }}>
             {plan.title}
           </span>
-          {dirty && editMode === 'edit' && (
+          {dirty && editMode !== 'preview' && (
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent-orange)', flexShrink: 0 }} />
           )}
         </div>
@@ -402,10 +405,17 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
             padding: 2,
           }}
         >
-          {([['edit', Pencil], ['preview', Eye]] as const).map(([mode, Icon]) => (
+          {([
+              ['edit', Pencil],
+              ['live', Zap],
+              ['preview', Eye],
+            ] as const).map(([mode, Icon]) => (
             <motion.button
               key={mode}
-              onClick={() => setEditMode(mode)}
+              onClick={() => {
+                setEditMode(mode)
+                usePlanStore.getState().setEditorMode(mode)
+              }}
               whileTap={{ scale: 0.9 }}
               style={{
                 width: 28, height: 24, borderRadius: 5,
@@ -456,7 +466,21 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
 
       {/* Content */}
       <div ref={editorRef} className="flex-1 min-h-0" style={{ overflow: editMode === 'preview' ? 'auto' : 'hidden' }}>
-        {editMode === 'edit' ? (
+        {editMode === 'live' ? (
+          <SplitPaneLiveEditor
+            key={planId}
+            value={content}
+            onChange={handleChange}
+            onCursorLineChange={setCurrentLineIndex}
+            onContextMenu={handleEditorContextMenu}
+            onPreviewContextMenu={handlePreviewContextMenu}
+            mdFilePath={plan.filePath}
+            onInsertImageFromPicker={handleInsertImageFromPicker}
+            showToast={showToast}
+            onTriggerLinkPopup={handleTriggerLinkPopup}
+            onLinkClick={handleLinkClick}
+          />
+        ) : editMode === 'edit' ? (
           <MarkdownEditor
             value={content}
             onChange={handleChange}

@@ -46,6 +46,7 @@ function persistPlanPrefs(get: () => PlanStore) {
   store.set('planPrefs', {
     sortBy: get().sortBy,
     viewMode: get().viewMode,
+    editorMode: get().editorMode,
     tabs: get().tabs,
     activeTabId: get().activeTabId,
   })
@@ -60,6 +61,8 @@ interface PlanStore {
   sortBy: 'time' | 'name' | 'planDate'
   viewMode: 'card' | 'compact'
   plannerView: 'list' | 'calendar'
+  editorMode: 'live' | 'edit' | 'preview'
+  setEditorMode: (mode: 'live' | 'edit' | 'preview') => void
   setPlannerView: (view: 'list' | 'calendar') => void
   load: () => Promise<void>
   createPlan: (title: string, startDate: string, endDate: string | null, planType?: PlanType, content?: string) => Promise<Plan>
@@ -95,6 +98,7 @@ export const usePlanStore = create<PlanStore>()(
     activeTabId: null,
     sortBy: 'time',
     viewMode: 'card',
+    editorMode: 'edit' as const,
     plannerView: 'list',
 
     load: async () => {
@@ -116,6 +120,7 @@ export const usePlanStore = create<PlanStore>()(
         const prefs = await store.get<{
           sortBy: string
           viewMode: string
+          editorMode?: string
           tabs?: { id: string; title: string; pinned: boolean }[]
           activeTabId?: string | null
         }>('planPrefs')
@@ -133,6 +138,7 @@ export const usePlanStore = create<PlanStore>()(
           set({
             sortBy: (prefs.sortBy as any) ?? 'time',
             viewMode: (prefs.viewMode as any) ?? 'card',
+            editorMode: (prefs.editorMode as 'live' | 'edit' | 'preview') ?? 'edit',
             tabs: refreshedTabs,
             activeTabId: validActiveTabId,
             activePlanId: validActiveTabId,
@@ -294,6 +300,11 @@ export const usePlanStore = create<PlanStore>()(
 
     setViewMode: (mode) => {
       set({ viewMode: mode })
+      persistPlanPrefs(get)
+    },
+
+    setEditorMode: (mode) => {
+      set({ editorMode: mode })
       persistPlanPrefs(get)
     },
 
