@@ -18,6 +18,8 @@
 *.swp
 *.tsbuildinfo
 *~
+*.lnk
+electron.vite.config.*.mjs
 .DS_Store
 .DS_Store?
 .Spotlight-V100
