@@ -132,3 +132,17 @@ export const pdfExport = {
   generate: (html: string, fileName: string, defaultPath?: string) =>
     window.api.exportPdf(html, fileName, defaultPath),
 }
+
+export const ai = {
+  startTask: (taskId: string, prompt: string, workspace: string): Promise<void> =>
+    window.api.aiStartTask(taskId, prompt, workspace),
+  stopTask: (taskId: string): Promise<void> =>
+    window.api.aiStopTask(taskId),
+  checkClaude: (): Promise<{ installed: boolean; version?: string }> =>
+    window.api.aiCheckClaude(),
+}
+
+export const aiEvents = {
+  onMessage: (callback: (taskId: string, msg: unknown) => void): (() => void) =>
+    window.api.onAiMessage(callback),
+}
