@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { join, dirname, resolve, parse as parsePath } from 'path'
 import { tmpdir } from 'os'
 import { getStore } from './store'
+import { startTask, stopTask, checkClaude } from './claude-service'
 import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode, startPetCursorTracking, stopPetCursorTracking, setPetDragging, movePetDrag, toggleAlwaysOnTop } from './window'
 import { IPC } from '../shared/ipc-channels'
 import { registerHotkeys } from './hotkey'
@@ -459,4 +460,13 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.IMAGE_MOVE_ASSETS, async () => {
     // No-op: images are centralized, no per-document dirs to move
   })
+
+  // AI
+  ipcMain.handle(IPC.AI_START_TASK, (_e, taskId: string, prompt: string, workspace: string) => {
+    return startTask(taskId, prompt, workspace)
+  })
+  ipcMain.handle(IPC.AI_STOP_TASK, (_e, taskId: string) => {
+    stopTask(taskId)
+  })
+  ipcMain.handle(IPC.AI_CHECK_CLAUDE, () => checkClaude())
 }
