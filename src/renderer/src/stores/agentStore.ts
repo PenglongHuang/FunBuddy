@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
+import { nanoid } from 'nanoid'
 import { ai } from '@/lib/ipc'
 import type { AgentMessage, AgentTask } from '../../../shared/agent-types'
 
@@ -8,7 +9,7 @@ interface AgentStore {
   activeTaskId: string | null
   defaultWorkspace: string
   setDefaultWorkspace: (ws: string) => void
-  createTask: (taskId: string, title: string, workspace: string) => string
+  createTask: (title: string, workspace: string) => string
   sendPrompt: (taskId: string, prompt: string) => void
   stopTask: (taskId: string) => void
   ingest: (taskId: string, msg: AgentMessage) => void
@@ -25,7 +26,8 @@ export const useAgentStore = create<AgentStore>()(
 
     setDefaultWorkspace: (ws) => set((s) => { s.defaultWorkspace = ws }),
 
-    createTask: (taskId, title, workspace) => {
+    createTask: (title, workspace) => {
+      const taskId = nanoid(8)
       const task: AgentTask = { taskId, title, workspace, status: 'running', messages: [] }
       set((s) => {
         s.tasks.push(task)
