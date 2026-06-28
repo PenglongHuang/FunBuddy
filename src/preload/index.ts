@@ -120,6 +120,19 @@ const api = {
     ipcRenderer.on(IPC.SET_WINDOW_MODE, handler)
     return () => ipcRenderer.removeListener(IPC.SET_WINDOW_MODE, handler)
   },
+
+  // AI
+  aiStartTask: (taskId: string, prompt: string, workspace: string, sessionId?: string) =>
+    ipcRenderer.invoke(IPC.AI_START_TASK, taskId, prompt, workspace, sessionId),
+  aiStopTask: (taskId: string) =>
+    ipcRenderer.invoke(IPC.AI_STOP_TASK, taskId),
+  aiGetProviderInfo: () =>
+    ipcRenderer.invoke(IPC.AI_GET_PROVIDER_INFO),
+  onAiMessage: (callback: (taskId: string, msg: unknown) => void) => {
+    const handler = (_e: any, data: { taskId: string; msg: unknown }) => callback(data.taskId, data.msg)
+    ipcRenderer.on(IPC.AI_MESSAGE, handler)
+    return () => ipcRenderer.removeListener(IPC.AI_MESSAGE, handler)
+  },
 }
 
 if (process.contextIsolated) {

@@ -9,8 +9,8 @@ interface PetStore {
   touch: () => void
   windowMode: 'pet' | 'expanded'
   setWindowMode: (mode: 'pet' | 'expanded') => void
-  activePanel: 'planner' | 'timer' | 'notes' | 'settings'
-  setActivePanel: (panel: 'planner' | 'timer' | 'notes' | 'settings') => void
+  activePanel: 'planner' | 'timer' | 'notes' | 'settings' | 'agent'
+  setActivePanel: (panel: 'planner' | 'timer' | 'notes' | 'settings' | 'agent') => void
   petPosition: { x: number; y: number } | null
   setPetPosition: (pos: { x: number; y: number } | null) => void
   petHovered: boolean

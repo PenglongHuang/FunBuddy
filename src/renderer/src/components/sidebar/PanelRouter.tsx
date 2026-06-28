@@ -9,12 +9,14 @@ const PlannerPanel = lazy(() => import('@/components/planner/PlannerPanel'))
 const TimerPanel = lazy(() => import('@/components/timer/TimerPanel'))
 const NotesPanel = lazy(() => import('@/components/notes/NotesPanel'))
 const SettingsPanel = lazy(() => import('@/components/settings/SettingsPanel'))
+const AgentPanel = lazy(() => import('@/components/agent/AgentPanel'))
 
 const panelConfig: Record<string, { Component: React.ComponentType }> = {
   planner: { Component: PlannerPanel },
   timer: { Component: TimerPanel },
   notes: { Component: NotesPanel },
   settings: { Component: SettingsPanel },
+  agent: { Component: AgentPanel },
 }
 
 interface PanelRouterProps {
@@ -78,11 +80,14 @@ export default function PanelRouter({ activePanel }: PanelRouterProps) {
           <Loader2 size={16} className="text-white/30 animate-spin" />
         </div>
       }>
-        <GlassPanel header={
-          showPlanTabs ? <PlanTabBar activeTabId={planActiveTabId} /> :
-          showNoteTabs ? <NoteTabBar activeTabId={noteActiveTabId} /> :
-          undefined
-        }>
+        <GlassPanel
+          header={
+            showPlanTabs ? <PlanTabBar activeTabId={planActiveTabId} /> :
+            showNoteTabs ? <NoteTabBar activeTabId={noteActiveTabId} /> :
+            undefined
+          }
+          inset={activePanel === 'agent' ? 'clamp(8px, 2cqw, 12px)' : undefined}
+        >
           <config.Component />
         </GlassPanel>
       </Suspense>

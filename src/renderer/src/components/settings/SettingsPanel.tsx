@@ -1,11 +1,12 @@
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePlanStore } from '@/stores/planStore'
 import { useNoteStore } from '@/stores/noteStore'
-import { dialog, fs, store, hotkey } from '@/lib/ipc'
-import { FolderOpen, Timer, Zap, Database, Check, Pencil } from 'lucide-react'
+import { dialog, fs, store, hotkey, ai } from '@/lib/ipc'
+import { FolderOpen, Timer, Zap, Database, Check, Pencil, Bot } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useToast } from '@/components/common/Toast'
 import { HotkeyRecorder } from './HotkeyRecorder'
+import type { ProviderInfo } from '../../../../shared/agent-types'
 
 /* ============================================
    iOS/macOS-style Toggle Switch
@@ -81,6 +82,64 @@ function SettingsGroup({
       {/* Group content */}
       {children}
     </div>
+  )
+}
+
+/* ============================================
+   Coding Agent binding display
+   ============================================ */
+function CodingAgentGroup() {
+  const [info, setInfo] = useState<ProviderInfo | null>(null)
+
+  useEffect(() => {
+    ai.getProviderInfo().then(setInfo).catch(() => setInfo(null))
+  }, [])
+
+  const ok = info?.available === true
+  const statusText =
+    info == null ? '检测中…' : ok ? `已安装${info.version ? ` · ${info.version}` : ''}` : '未检测到(AI 面板会引导安装)'
+
+  return (
+    <SettingsGroup icon={<Bot size={16} />} title="Coding Agent" iconColor="var(--accent-purple)">
+      <div className="flex items-center" style={{ gap: 10, padding: '10px 0', borderBottom: '0.5px solid var(--separator)' }}>
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            background: 'rgba(175,82,222,0.14)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <Bot size={14} style={{ color: '#AF52DE' }} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="text-caption-1" style={{ color: 'var(--text-primary)' }}>
+            {info?.displayName ?? 'Claude Code'}
+          </div>
+          <div className="text-caption-2" style={{ color: 'var(--text-tertiary)' }}>{statusText}</div>
+        </div>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 500,
+            color: ok ? '#30D158' : '#FF9F0A',
+            background: ok ? 'rgba(48,209,88,0.12)' : 'rgba(255,159,10,0.12)',
+            padding: '2px 8px',
+            borderRadius: 'var(--radius-full)',
+            flexShrink: 0,
+          }}
+        >
+          {ok ? '可用' : '未就绪'}
+        </span>
+      </div>
+      <div className="text-caption-2" style={{ color: 'var(--text-quaternary)', paddingTop: 8 }}>
+        目前绑定 Claude Code;更多 Coding Agent 即将支持。
+      </div>
+    </SettingsGroup>
   )
 }
 
@@ -370,7 +429,7 @@ export default function SettingsPanel() {
   }
 
   return (
-    <div className="flex flex-col" style={{ position: 'relative', maxWidth: 520, margin: '0 auto', width: '100%' }}>
+    <div className="flex flex-col h-full" style={{ position: 'relative', maxWidth: 520, margin: '0 auto', width: '100%', minHeight: 0, overflowY: 'auto' }}>
       <ToastContainer />
 
       {/* Unsaved changes bar + Save button */}
@@ -622,6 +681,9 @@ export default function SettingsPanel() {
           error={hotkeyError}
         />
       </SettingsGroup>
+
+      {/* ===== Coding Agent Group ===== */}
+      <CodingAgentGroup />
 
       {/* ===== Editor Group ===== */}
       <SettingsGroup

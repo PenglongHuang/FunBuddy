@@ -52,4 +52,10 @@ export const IPC = {
 
   // PDF
   EXPORT_PDF: 'export:pdf',
+
+  // AI
+  AI_START_TASK: 'ai:startTask',
+  AI_STOP_TASK: 'ai:stopTask',
+  AI_GET_PROVIDER_INFO: 'ai:getProviderInfo',
+  AI_MESSAGE: 'ai:message',
 } as const

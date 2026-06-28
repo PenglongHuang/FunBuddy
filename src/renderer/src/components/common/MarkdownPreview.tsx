@@ -41,9 +41,10 @@ interface MarkdownPreviewProps {
   content: string
   mdFilePath?: string
   onLinkClick?: (id: string, type: string) => void
+  linkTarget?: '_blank'
 }
 
-export default function MarkdownPreview({ content, mdFilePath, onLinkClick }: MarkdownPreviewProps) {
+export default function MarkdownPreview({ content, mdFilePath, onLinkClick, linkTarget }: MarkdownPreviewProps) {
   const [imageMap, setImageMap] = useState<Record<string, string>>({})
 
   const imageRefs = useMemo(() => {
@@ -121,8 +122,15 @@ export default function MarkdownPreview({ content, mdFilePath, onLinkClick }: Ma
       return `<img src="${href || ''}" alt="${text || ''}" ${title ? `title="${title}"` : ''} style="max-width:100%;border-radius:var(--radius-sm)">`
     }
 
+    if (linkTarget === '_blank') {
+      r.link = function ({ href, title, text }) {
+        const t = title ? ` title="${title}"` : ''
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer"${t}>${text}</a>`
+      }
+    }
+
     return r
-  }, [imageMap])
+  }, [imageMap, linkTarget])
 
   const processedContent = useMemo(() => {
     const linkReplaced = resolvedLinkMap.size === 0

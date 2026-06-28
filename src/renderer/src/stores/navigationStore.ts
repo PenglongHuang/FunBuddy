@@ -12,6 +12,7 @@ type NavigationEntry =
   | { panel: 'notes'; subView: 'editor'; noteId: string }
   | { panel: 'timer' }
   | { panel: 'settings' }
+  | { panel: 'agent' }
 
 interface NavigationStore {
   entries: NavigationEntry[]
