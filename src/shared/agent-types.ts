@@ -20,7 +20,10 @@ export interface AgentTask {
   updatedAt?: number
 }
 
-export interface ClaudeCheckResult {
-  installed: boolean
+/** 当前绑定的 Coding Agent 的可用性信息(供设置页展示)。 */
+export interface ProviderInfo {
+  providerId: string
+  displayName: string
+  available: boolean
   version?: string
 }

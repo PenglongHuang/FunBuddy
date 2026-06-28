@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import { PanelLeft, ChevronRight } from 'lucide-react'
+import MarkdownPreview from '@/components/common/MarkdownPreview'
 import { useAgentStore } from '@/stores/agentStore'
 import { aiEvents, ai, dialog, fs } from '@/lib/ipc'
 import { summarizeToolInput } from '@/lib/tool-input-summary'
-import type { AgentMessage, AgentTask, AgentTaskStatus, ClaudeCheckResult } from '../../../../shared/agent-types'
+import type { AgentMessage, AgentTask, AgentTaskStatus, ProviderInfo } from '../../../../shared/agent-types'
 
 const TOOL_ICON: Record<string, string> = {
-  Read: '📖', Write: '📝', Edit: '✏️', Bash: '▶', Glob: '🔍', Grep: '🔎',
+  Read: '📖', Write: '📝', Edit: '✏️', Bash: '💻', Glob: '🔍', Grep: '🔎',
   WebSearch: '🌐', WebFetch: '🔗', Task: '🤖', Agent: '🤖',
 }
 
@@ -24,21 +26,28 @@ function ToolPills({ toolUses }: { toolUses: { name: string; input?: unknown }[]
       {toolUses.map((t, i) => {
         const summary = summarizeToolInput(t.name, t.input)
         const isEdit = t.name === 'Edit' || t.name === 'Write'
+        const isOpen = expanded === i
+        const hasInput = t.input != null
         return (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
             <span
-              onClick={() => setExpanded(expanded === i ? null : i)}
+              onClick={hasInput ? () => setExpanded(isOpen ? null : i) : undefined}
               style={{
-                fontSize: 11, padding: '3px 9px', borderRadius: 11, cursor: 'pointer',
+                fontSize: 11, padding: '3px 9px', borderRadius: 11,
+                cursor: hasInput ? 'pointer' : 'default',
+                display: 'inline-flex', alignItems: 'center', gap: 5,
                 background: isEdit ? 'rgba(255,159,10,0.1)' : 'rgba(255,255,255,0.06)',
                 border: `1px solid ${isEdit ? 'rgba(255,159,10,0.3)' : 'rgba(255,255,255,0.1)'}`,
                 color: isEdit ? '#FF9F0A' : 'rgba(255,255,255,0.7)',
                 maxWidth: '100%',
               }}
             >
-              {TOOL_ICON[t.name] ?? '🔧'} {t.name}{summary ? ` · ${summary}` : ''}
+              <span>{TOOL_ICON[t.name] ?? '🔧'} {t.name}{summary ? ` · ${summary}` : ''}</span>
+              {hasInput && (
+                <ChevronRight size={11} style={{ flexShrink: 0, opacity: 0.55, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s ease' }} />
+              )}
             </span>
-            {expanded === i && t.input != null && (
+            {isOpen && t.input != null && (
               <pre style={{
                 margin: 0, maxWidth: '100%', overflowX: 'auto', fontSize: 10.5, lineHeight: 1.4,
                 background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)',
@@ -55,21 +64,24 @@ function ToolPills({ toolUses }: { toolUses: { name: string; input?: unknown }[]
 }
 
 function SessionList({
-  tasks, activeTaskId, onSelect, onDelete, onNew,
+  tasks, activeTaskId, onSelect, onDelete, onNew, collapsed,
 }: {
   tasks: AgentTask[]
   activeTaskId: string | null
   onSelect: (taskId: string) => void
   onDelete: (taskId: string) => void
   onNew: () => void
+  collapsed: boolean
 }) {
   const sorted = [...tasks].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
   return (
-    <div style={{ width: 172, flexShrink: 0, borderRight: '0.5px solid rgba(255,255,255,0.08)', padding: '8px 6px', display: 'flex', flexDirection: 'column', gap: 6, background: 'rgba(0,0,0,0.18)', overflowY: 'auto' }}>
-      <button onClick={onNew} style={{ padding: '8px', textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.7)', border: '1px dashed rgba(255,255,255,0.18)', borderRadius: 9, background: 'transparent', cursor: 'pointer' }}>
-        ＋ 新会话
-      </button>
-      {sorted.map((t) => {
+    <div style={{ width: collapsed ? 0 : 172, flexShrink: 0, borderRight: collapsed ? 'none' : '0.5px solid rgba(255,255,255,0.08)', padding: collapsed ? 0 : '8px 6px', display: 'flex', flexDirection: 'column', gap: 6, background: 'rgba(0,0,0,0.18)', overflowX: 'hidden', overflowY: collapsed ? 'hidden' : 'auto', transition: 'width .18s ease, padding .18s ease' }}>
+      {!collapsed && (
+        <>
+          <button onClick={onNew} style={{ padding: '8px', textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.7)', border: '1px dashed rgba(255,255,255,0.18)', borderRadius: 9, background: 'transparent', cursor: 'pointer' }}>
+            ＋ 新会话
+          </button>
+          {sorted.map((t) => {
         const isActive = t.taskId === activeTaskId
         const meta = STATUS_META[t.status]
         const turns = t.messages.filter((m) => m.role === 'user').length
@@ -99,6 +111,8 @@ function SessionList({
           </div>
         )
       })}
+        </>
+      )}
     </div>
   )
 }
@@ -117,14 +131,16 @@ export default function AgentPanel() {
   const hydrate = useAgentStore((s) => s.hydrate)
 
   const [workspace, setWorkspace] = useState('')
-  const [claudeStatus, setClaudeStatus] = useState<ClaudeCheckResult | null>(null)
+  const [claudeStatus, setClaudeStatus] = useState<ProviderInfo | null>(null)
   const [input, setInput] = useState('')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const stickToBottomRef = useRef(true)
 
   // 初始化默认工作空间 + 探活 Claude
   useEffect(() => {
     if (!defaultWorkspace) {
-      ai.checkClaude().then((r) => setClaudeStatus(r))
+      ai.getProviderInfo().then((r) => setClaudeStatus(r))
       fs.getStorageDir().then((d) => {
         setDefaultWorkspace(d)
         setWorkspace(d)
@@ -147,16 +163,34 @@ export default function AgentPanel() {
     })
   }, [ingest])
 
-  // 滚到底
+  // 切换会话：强制滚到底并恢复跟随
   useEffect(() => {
+    stickToBottomRef.current = true
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
-  }, [tasks, activeTaskId])
+  }, [activeTaskId])
+
+  // 新消息/流式增量：仅在用户未上滑时跟随
+  useEffect(() => {
+    if (stickToBottomRef.current) {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
+    }
+  }, [tasks])
 
   const activeTask = tasks.find((t) => t.taskId === activeTaskId) ?? null
   const isRunning = activeTask?.status === 'running'
   const lastMsg = activeTask?.messages[activeTask.messages.length - 1]
-  // 运行中且当前没有正在流式的 assistant 气泡 → 显示"思考中"
-  const showThinking = isRunning && !(lastMsg && lastMsg.role === 'assistant' && (lastMsg as { partial?: boolean }).partial)
+  // "正在流式输出可见文本"：最后一条是带文本的 partial —— 此时显示光标，而非"思考中"
+  const lastIsStreamingText =
+    !!lastMsg && lastMsg.role === 'assistant' && !!lastMsg.partial && !!lastMsg.text
+  // 思考中：运行中、但还没开始输出可见文本（含 message_start 空 partial、纯工具调用阶段、轮次之间）
+  const showThinking = isRunning && !lastIsStreamingText
+
+  function handleScroll() {
+    const el = scrollRef.current
+    if (!el) return
+    // 贴近底部（容差 80px）才视为"跟随"
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+  }
 
   async function pickWorkspace() {
     const dir = await dialog.openDirectory()
@@ -180,8 +214,20 @@ export default function AgentPanel() {
     setInput('')
   }
 
+  async function handleDelete(taskId: string) {
+    const res = await dialog.showMessageBox({
+      type: 'warning',
+      message: '删除此会话？',
+      detail: '该 AI 会话的历史记录将被清除，且无法恢复。',
+      buttons: ['取消', '删除'],
+      defaultId: 0,
+      cancelId: 0,
+    })
+    if (res.response === 1) deleteTask(taskId)
+  }
+
   // 未装 Claude 引导
-  if (claudeStatus && !claudeStatus.installed) {
+  if (claudeStatus && !claudeStatus.available) {
     return (
       <div style={{ padding: 24, color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 1.7 }}>
         <div style={{ fontSize: 28, marginBottom: 12 }}>✨</div>
@@ -192,7 +238,7 @@ export default function AgentPanel() {
 claude   # 登录`}
         </pre>
         <button
-          onClick={() => ai.checkClaude().then(setClaudeStatus)}
+          onClick={() => ai.getProviderInfo().then(setClaudeStatus)}
           style={{ marginTop: 12, padding: '6px 14px', borderRadius: 8, background: 'rgba(10,132,255,0.2)', border: '1px solid rgba(10,132,255,0.4)', color: 'white', cursor: 'pointer' }}
         >
           重新检测
@@ -211,13 +257,31 @@ claude   # 登录`}
       `}</style>
 
       {/* 顶栏 */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
-        <button onClick={pickWorkspace} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '6px 12px', color: 'inherit', cursor: 'pointer', fontSize: 12, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          📁 {workspace || '...'} ▾
-        </button>
-        <span style={{ fontSize: 11, color: '#FF9F0A', background: 'rgba(255,159,10,0.12)', border: '1px solid rgba(255,159,10,0.3)', borderRadius: 6, padding: '3px 8px' }}>
-          ⚠ 无限制模式 · bypass
-        </span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <button onClick={pickWorkspace} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '6px 12px', color: 'inherit', cursor: 'pointer', fontSize: 12, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            📁 {workspace || '...'} ▾
+          </button>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <span style={{ fontSize: 11, color: '#FF9F0A', background: 'rgba(255,159,10,0.12)', border: '1px solid rgba(255,159,10,0.3)', borderRadius: 6, padding: '3px 8px' }}>
+            ⚠ bypass 模式
+          </span>
+          <button
+            onClick={() => setSidebarCollapsed((v) => !v)}
+            title={sidebarCollapsed ? '展开会话列表' : '收起会话列表'}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 30, height: 28, borderRadius: 8, cursor: 'pointer',
+              background: sidebarCollapsed ? 'transparent' : 'rgba(255,255,255,0.14)',
+              border: `1px solid ${sidebarCollapsed ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)'}`,
+              color: sidebarCollapsed ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.95)',
+              transition: 'background .15s ease, color .15s ease',
+            }}
+          >
+            <PanelLeft size={14} strokeWidth={1.7} />
+          </button>
+        </div>
       </div>
 
       {/* 主体:侧栏 + 对话 */}
@@ -226,12 +290,13 @@ claude   # 登录`}
           tasks={tasks}
           activeTaskId={activeTaskId}
           onSelect={setActiveTask}
-          onDelete={deleteTask}
+          onDelete={handleDelete}
           onNew={handleNewConversation}
+          collapsed={sidebarCollapsed}
         />
 
         {/* 对话区 */}
-        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div ref={scrollRef} onScroll={handleScroll} style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 10, userSelect: 'text' }}>
           {!activeTask && (
             <div style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: 40, fontSize: 12 }}>
               点左侧"新会话"或直接输入消息开始
@@ -249,9 +314,10 @@ claude   # 登录`}
               const streaming = (m as { partial?: boolean }).partial
               return (
                 <div key={i} style={{ alignSelf: 'flex-start', maxWidth: '88%', display: 'flex', flexDirection: 'column', gap: 0 }}>
-                  {(m.text || streaming) && (
-                    <div style={{ fontSize: 12.5, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                      {m.text}{streaming && <span className="fb-cursor">▋</span>}
+                  {m.text && (
+                    <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+                      <MarkdownPreview content={m.text} linkTarget="_blank" />
+                      {streaming && <span className="fb-cursor">▋</span>}
                     </div>
                   )}
                   <ToolPills toolUses={m.toolUses} />
@@ -276,7 +342,7 @@ claude   # 登录`}
       </div>
 
       {/* 输入区 */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '10px 12px', borderTop: '0.5px solid rgba(255,255,255,0.08)' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px', borderTop: '0.5px solid rgba(255,255,255,0.08)' }}>
         <input
           value={input}
           disabled={isRunning}

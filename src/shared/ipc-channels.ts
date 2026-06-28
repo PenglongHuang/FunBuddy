@@ -56,6 +56,6 @@ export const IPC = {
   // AI
   AI_START_TASK: 'ai:startTask',
   AI_STOP_TASK: 'ai:stopTask',
-  AI_CHECK_CLAUDE: 'ai:checkClaude',
+  AI_GET_PROVIDER_INFO: 'ai:getProviderInfo',
   AI_MESSAGE: 'ai:message',
 } as const

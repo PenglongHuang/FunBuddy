@@ -14,6 +14,10 @@ export interface StoreSchema {
       maxTabsPerPanel: number
       navHistoryLimit: number
     }
+    /** Coding Agent 绑定(目前仅 'claude-code',后续可扩展) */
+    ai: {
+      provider: string
+    }
     storageDirHistory: string[]
   }
   timer: {
@@ -40,6 +44,7 @@ export const storeDefaults: StoreSchema = {
     storageDir: '',
     pomodoro: { focusDuration: 25, shortBreak: 5, longBreak: 15, roundsBeforeLongBreak: 4 },
     app: { autoStart: false, closeToTray: true, quickCaptureHotkey: 'Ctrl+Shift+N', maxTabsPerPanel: 20, navHistoryLimit: 100 },
+    ai: { provider: 'claude-code' },
     storageDirHistory: [],
   },
   timer: { status: 'idle', phase: 'focus', remainingMs: 0, totalMs: 0, timestamp: '', round: 0 },

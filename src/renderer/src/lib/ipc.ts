@@ -138,8 +138,8 @@ export const ai = {
     window.api.aiStartTask(taskId, prompt, workspace, sessionId),
   stopTask: (taskId: string): Promise<void> =>
     window.api.aiStopTask(taskId),
-  checkClaude: (): Promise<{ installed: boolean; version?: string }> =>
-    window.api.aiCheckClaude(),
+  getProviderInfo: (): Promise<{ providerId: string; displayName: string; available: boolean; version?: string }> =>
+    window.api.aiGetProviderInfo(),
 }
 
 export const aiEvents = {

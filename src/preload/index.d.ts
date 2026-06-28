@@ -41,7 +41,7 @@ export interface FunBuddyAPI {
   onSetWindowMode: (callback: (mode: string) => void) => () => void
   aiStartTask: (taskId: string, prompt: string, workspace: string, sessionId?: string) => Promise<void>
   aiStopTask: (taskId: string) => Promise<void>
-  aiCheckClaude: () => Promise<{ installed: boolean; version?: string }>
+  aiGetProviderInfo: () => Promise<{ providerId: string; displayName: string; available: boolean; version?: string }>
   onAiMessage: (callback: (taskId: string, msg: unknown) => void) => () => void
 
   // Image

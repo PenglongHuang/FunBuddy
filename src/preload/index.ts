@@ -126,8 +126,8 @@ const api = {
     ipcRenderer.invoke(IPC.AI_START_TASK, taskId, prompt, workspace, sessionId),
   aiStopTask: (taskId: string) =>
     ipcRenderer.invoke(IPC.AI_STOP_TASK, taskId),
-  aiCheckClaude: () =>
-    ipcRenderer.invoke(IPC.AI_CHECK_CLAUDE),
+  aiGetProviderInfo: () =>
+    ipcRenderer.invoke(IPC.AI_GET_PROVIDER_INFO),
   onAiMessage: (callback: (taskId: string, msg: unknown) => void) => {
     const handler = (_e: any, data: { taskId: string; msg: unknown }) => callback(data.taskId, data.msg)
     ipcRenderer.on(IPC.AI_MESSAGE, handler)

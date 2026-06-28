@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { CalendarDays, Timer, FileText, Settings, type LucideIcon } from 'lucide-react'
+import { CalendarDays, Timer, FileText, Settings, Bot, type LucideIcon } from 'lucide-react'
 import { usePetStore } from '@/stores/petStore'
 import { useTimerStore } from '@/stores/timerStore'
 import { useNavigationStore } from '@/stores/navigationStore'
@@ -8,6 +8,7 @@ const PANELS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'planner', label: '计划', icon: CalendarDays },
   { id: 'timer', label: '专注', icon: Timer },
   { id: 'notes', label: '笔记', icon: FileText },
+  { id: 'agent', label: 'AI', icon: Bot },
   { id: 'settings', label: '设置', icon: Settings },
 ]
 

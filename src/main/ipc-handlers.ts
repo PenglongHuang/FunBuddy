@@ -4,7 +4,7 @@ import { existsSync } from 'fs'
 import { join, dirname, resolve, parse as parsePath } from 'path'
 import { tmpdir } from 'os'
 import { getStore } from './store'
-import { startTask, stopTask, checkClaude } from './claude-service'
+import { startTask, stopTask, getProviderInfo } from './claude-service'
 import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode, startPetCursorTracking, stopPetCursorTracking, setPetDragging, movePetDrag, toggleAlwaysOnTop } from './window'
 import { IPC } from '../shared/ipc-channels'
 import { registerHotkeys } from './hotkey'
@@ -468,5 +468,5 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.AI_STOP_TASK, (_e, taskId: string) => {
     stopTask(taskId)
   })
-  ipcMain.handle(IPC.AI_CHECK_CLAUDE, () => checkClaude())
+  ipcMain.handle(IPC.AI_GET_PROVIDER_INFO, () => getProviderInfo())
 }

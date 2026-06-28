@@ -6,7 +6,7 @@ vi.mock('@/lib/ipc', () => ({
   ai: {
     startTask: vi.fn().mockResolvedValue(undefined),
     stopTask: vi.fn().mockResolvedValue(undefined),
-    checkClaude: vi.fn().mockResolvedValue({ installed: true }),
+    getProviderInfo: vi.fn().mockResolvedValue({ providerId: 'claude-code', displayName: 'Claude Code', available: true }),
   },
   fs: {
     readFile: vi.fn(),
