@@ -44,7 +44,8 @@ export default function AgentPanel() {
   const [input, setInput] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // 初始化默认工作空间
+  // 初始化默认工作空间(defaultWorkspace 变化时跑;workspace 不入 deps —— effect 内会 setWorkspace,
+  // 放进 deps 会触发重跑。功能仍自稳定:首次 defaultWorkspace='' 拉取并设置,二次 defaultWorkspace 已就绪)
   useEffect(() => {
     if (!defaultWorkspace) {
       ai.checkClaude().then((r) => setClaudeStatus(r))
@@ -55,7 +56,8 @@ export default function AgentPanel() {
     } else if (!workspace) {
       setWorkspace(defaultWorkspace)
     }
-  }, [defaultWorkspace, workspace, setDefaultWorkspace])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultWorkspace, setDefaultWorkspace])
 
   // 订阅流式消息
   useEffect(() => {
@@ -79,6 +81,7 @@ export default function AgentPanel() {
   function handleSend() {
     const text = input.trim()
     if (!text) return
+    if (!workspace) return // 工作空间未就绪时不发送(避免空 cwd)
     let taskId = activeTaskId
     if (!taskId || activeTask?.status === 'idle' || activeTask?.status === 'error' || activeTask?.status === 'stopped') {
       taskId = createTask(text.slice(0, 40), workspace)
