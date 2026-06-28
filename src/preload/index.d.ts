@@ -39,6 +39,10 @@ export interface FunBuddyAPI {
   quickNoteSaved: (noteId: string) => void
   onNavigateToNote: (callback: (noteId: string) => void) => () => void
   onSetWindowMode: (callback: (mode: string) => void) => () => void
+  aiStartTask: (taskId: string, prompt: string, workspace: string) => Promise<void>
+  aiStopTask: (taskId: string) => Promise<void>
+  aiCheckClaude: () => Promise<{ installed: boolean; version?: string }>
+  onAiMessage: (callback: (taskId: string, msg: unknown) => void) => () => void
 
   // Image
   imageSave: (mdFilePath: string, imageData: ArrayBuffer, ext: string, altName?: string) => Promise<{ relativePath: string; fileName: string }>
