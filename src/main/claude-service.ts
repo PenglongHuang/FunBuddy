@@ -51,7 +51,13 @@ export async function startTask(taskId: string, prompt: string, workspace: strin
       if (mapped) send(taskId, mapped)
     }
   } catch (err) {
-    send(taskId, { role: 'system', kind: 'error', meta: { error: String(err) } })
+    // 用户主动停止(abort)不算错误,不污染 renderer 的 stopped 状态
+    if (!controller.signal.aborted) {
+      send(taskId, { role: 'system', kind: 'error', meta: { error: String(err) } })
+    }
+  } finally {
+    // 正常完成或出错都清理 session;带 controller 身份 guard 防止与并发 re-startTask 竞争
+    if (sessions.get(taskId)?.controller === controller) sessions.delete(taskId)
   }
 }
 
