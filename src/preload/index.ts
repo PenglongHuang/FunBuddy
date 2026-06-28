@@ -122,8 +122,8 @@ const api = {
   },
 
   // AI
-  aiStartTask: (taskId: string, prompt: string, workspace: string) =>
-    ipcRenderer.invoke(IPC.AI_START_TASK, taskId, prompt, workspace),
+  aiStartTask: (taskId: string, prompt: string, workspace: string, sessionId?: string) =>
+    ipcRenderer.invoke(IPC.AI_START_TASK, taskId, prompt, workspace, sessionId),
   aiStopTask: (taskId: string) =>
     ipcRenderer.invoke(IPC.AI_STOP_TASK, taskId),
   aiCheckClaude: () =>

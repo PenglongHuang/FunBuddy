@@ -134,8 +134,8 @@ export const pdfExport = {
 }
 
 export const ai = {
-  startTask: (taskId: string, prompt: string, workspace: string): Promise<void> =>
-    window.api.aiStartTask(taskId, prompt, workspace),
+  startTask: (taskId: string, prompt: string, workspace: string, sessionId?: string): Promise<void> =>
+    window.api.aiStartTask(taskId, prompt, workspace, sessionId),
   stopTask: (taskId: string): Promise<void> =>
     window.api.aiStopTask(taskId),
   checkClaude: (): Promise<{ installed: boolean; version?: string }> =>

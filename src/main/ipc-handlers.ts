@@ -462,8 +462,8 @@ export function registerIpcHandlers(): void {
   })
 
   // AI
-  ipcMain.handle(IPC.AI_START_TASK, (_e, taskId: string, prompt: string, workspace: string) => {
-    return startTask(taskId, prompt, workspace)
+  ipcMain.handle(IPC.AI_START_TASK, (_e, taskId: string, prompt: string, workspace: string, sessionId?: string) => {
+    return startTask(taskId, prompt, workspace, sessionId)
   })
   ipcMain.handle(IPC.AI_STOP_TASK, (_e, taskId: string) => {
     stopTask(taskId)
