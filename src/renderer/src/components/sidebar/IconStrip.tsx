@@ -3,6 +3,7 @@ import {
   Timer,
   FileText,
   Settings,
+  Bot,
   type LucideIcon,
 } from 'lucide-react'
 import { motion } from 'motion/react'
@@ -13,6 +14,7 @@ const NAV_ITEMS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'timer', label: '专注', icon: Timer },
   { id: 'notes', label: '笔记', icon: FileText },
   { id: 'settings', label: '设置', icon: Settings },
+  { id: 'agent', label: 'AI', icon: Bot },
 ]
 
 interface IconStripProps {

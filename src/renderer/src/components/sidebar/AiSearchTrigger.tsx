@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { useNavigationStore } from '@/stores/navigationStore'
 
 export default function AiSearchTrigger() {
-  const toggleAiSearch = useNavigationStore((s) => s.toggleAiSearch)
+  const navPush = useNavigationStore((s) => s.push)
   const [hovered, setHovered] = useState(false)
 
   return (
     <button
-      onClick={toggleAiSearch}
+      onClick={() => navPush({ panel: 'agent' })}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
