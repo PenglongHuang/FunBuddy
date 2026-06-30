@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sessionMessageToAgentMessage } from './session-message-mapper'
+import { sessionMessageToAgentMessage } from '../session-message-mapper'
 
 describe('sessionMessageToAgentMessage', () => {
   it('把 assistant 消息映射成 AgentMessage.assistant(含 text 和 toolUses)', () => {

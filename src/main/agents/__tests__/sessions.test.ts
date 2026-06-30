@@ -14,7 +14,7 @@ import {
   getAgentSessionMessages,
   sessionExists,
   deleteAgentSession,
-} from './sessions'
+} from '../sessions'
 
 describe('sessions 封装层', () => {
   beforeEach(() => {

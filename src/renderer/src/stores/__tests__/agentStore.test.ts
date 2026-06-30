@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ai, fs } from '@/lib/ipc'
-import { useAgentStore } from './agentStore'
+import { useAgentStore } from '../agentStore'
 
 vi.mock('@/lib/ipc', () => ({
   ai: {

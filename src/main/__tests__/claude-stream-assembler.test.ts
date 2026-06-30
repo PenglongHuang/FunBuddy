@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TurnAssembler, type StreamEvent } from './claude-stream-assembler'
+import { TurnAssembler, type StreamEvent } from '../claude-stream-assembler'
 
 const msgStart = (): StreamEvent => ({ type: 'message_start' })
 const textStart = (index: number): StreamEvent => ({
