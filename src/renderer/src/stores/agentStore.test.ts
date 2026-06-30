@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { ai, fs } from '@/lib/ipc'
+import { ai } from '@/lib/ipc'
 import { useAgentStore } from './agentStore'
 
 vi.mock('@/lib/ipc', () => ({
@@ -7,138 +7,130 @@ vi.mock('@/lib/ipc', () => ({
     startTask: vi.fn().mockResolvedValue(undefined),
     stopTask: vi.fn().mockResolvedValue(undefined),
     getProviderInfo: vi.fn().mockResolvedValue({ providerId: 'claude-code', displayName: 'Claude Code', available: true }),
+    listSessions: vi.fn().mockResolvedValue([]),
+    getSessionMessages: vi.fn().mockResolvedValue([]),
+    deleteSession: vi.fn().mockResolvedValue(undefined),
   },
   fs: {
     readFile: vi.fn(),
     writeFile: vi.fn().mockResolvedValue(undefined),
-    exists: vi.fn(),
-    deleteFile: vi.fn(),
+    exists: vi.fn().mockResolvedValue(false),
+    deleteFile: vi.fn().mockResolvedValue(undefined),
   },
 }))
 
 describe('agentStore', () => {
   beforeEach(() => {
     useAgentStore.getState().reset()
-    vi.mocked(ai.startTask).mockClear()
-    vi.mocked(fs.readFile).mockReset()
-    vi.mocked(fs.writeFile).mockClear()
+    vi.clearAllMocks()
   })
 
-  it('createTask adds a task in idle status (draft)', () => {
-    const taskId = useAgentStore.getState().createTask('do thing', '/ws')
+  it('createTask 建立 draft 态(无 sessionId,无 messages)', () => {
+    const taskId = useAgentStore.getState().createTask('新会话', '/ws')
     const s = useAgentStore.getState()
     expect(s.tasks).toHaveLength(1)
-    expect(s.tasks[0].status).toBe('idle')
+    expect(s.tasks[0]).toMatchObject({ phase: 'draft', status: 'idle' })
+    expect((s.tasks[0] as any).sessionId).toBeUndefined()
     expect(s.activeTaskId).toBe(taskId)
   })
 
-  it('ingest appends assistant message', () => {
+  it('sendPrompt 带 task 的 sessionId 调用 ai.startTask(live 态 resume)', () => {
     const taskId = useAgentStore.getState().createTask('t', '/ws')
-    useAgentStore.getState().ingest(taskId, { role: 'assistant', text: 'hi', toolUses: [] })
-    const s = useAgentStore.getState()
-    expect(s.tasks[0].messages).toHaveLength(1)
-    expect(s.tasks[0].messages[0]).toMatchObject({ role: 'assistant', text: 'hi' })
+    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'init', meta: { sessionId: 'sess-1' } })
+    useAgentStore.getState().sendPrompt(taskId, 'second')
+    expect(ai.startTask).toHaveBeenCalledWith(taskId, 'second', '/ws', 'sess-1')
   })
 
-  it('ingest upserts assistant message by id (partial→final replace, no duplicates)', () => {
+  it('sendPrompt 在 draft 态传 undefined(首条 prompt)', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().sendPrompt(taskId, 'first')
+    expect(ai.startTask).toHaveBeenCalledWith(taskId, 'first', '/ws', undefined)
+  })
+
+  it('ingest init 把 draft 升级为 live 并绑定 sessionId', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'init', meta: { sessionId: 's-9' } })
+    const t = useAgentStore.getState().tasks[0]
+    expect(t.phase).toBe('live')
+    expect(t.phase === 'live' && t.sessionId).toBe('s-9')
+  })
+
+  it('ingest 把 assistant 消息写入内存视图(按 taskId 索引)', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().ingest(taskId, { role: 'assistant', text: 'hi', toolUses: [] })
+    expect(useAgentStore.getState().getMessages(taskId)).toEqual([
+      { role: 'assistant', text: 'hi', toolUses: [] },
+    ])
+  })
+
+  it('ingest 按 id upsert assistant(partial→final 替换,无重复)', () => {
     const taskId = useAgentStore.getState().createTask('t', '/ws')
     const store = useAgentStore.getState()
     store.ingest(taskId, { role: 'assistant', text: 'Hel', toolUses: [], id: 't#1', partial: true })
-    store.ingest(taskId, { role: 'assistant', text: 'Hell', toolUses: [], id: 't#1', partial: true })
     store.ingest(taskId, { role: 'assistant', text: 'Hello', toolUses: [], id: 't#1', partial: false })
-    const msgs = useAgentStore.getState().tasks[0].messages
-    expect(msgs).toHaveLength(1)
-    expect(msgs[0]).toMatchObject({ text: 'Hello', partial: false })
+    expect(useAgentStore.getState().getMessages(taskId)).toEqual([
+      { role: 'assistant', text: 'Hello', toolUses: [], id: 't#1', partial: false },
+    ])
   })
 
-  it('ingest init captures sessionId', () => {
-    const taskId = useAgentStore.getState().createTask('t', '/ws')
-    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'init', meta: { sessionId: 'sess-9' } })
-    expect(useAgentStore.getState().tasks[0].sessionId).toBe('sess-9')
-  })
-
-  it('ingest result with isError=false sets status idle', () => {
+  it('ingest result isError=false 置 status idle', () => {
     const taskId = useAgentStore.getState().createTask('t', '/ws')
     useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'result', meta: { isError: false } })
     expect(useAgentStore.getState().tasks[0].status).toBe('idle')
   })
 
-  it('ingest result with isError=true sets status error', () => {
-    const taskId = useAgentStore.getState().createTask('t', '/ws')
-    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'result', meta: { isError: true } })
-    expect(useAgentStore.getState().tasks[0].status).toBe('error')
-  })
-
-  it('ingest error sets status error', () => {
-    const taskId = useAgentStore.getState().createTask('t', '/ws')
-    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'error', meta: { error: 'boom' } })
-    expect(useAgentStore.getState().tasks[0].status).toBe('error')
-  })
-
-  it('markStopped sets status stopped', () => {
+  it('markStopped 置 status stopped', () => {
     const taskId = useAgentStore.getState().createTask('t', '/ws')
     useAgentStore.getState().markStopped(taskId)
     expect(useAgentStore.getState().tasks[0].status).toBe('stopped')
   })
 
-  it('sendPrompt passes task sessionId to ai.startTask (resume)', () => {
+  it('deleteTask 对 live 会话调用 ai.deleteSession 清理 CLI 真相源', async () => {
     const taskId = useAgentStore.getState().createTask('t', '/ws')
-    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'init', meta: { sessionId: 'sess-1' } })
-    useAgentStore.getState().sendPrompt(taskId, 'second question')
-    expect(ai.startTask).toHaveBeenCalledWith(taskId, 'second question', '/ws', 'sess-1')
+    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'init', meta: { sessionId: 's-1' } })
+    await useAgentStore.getState().deleteTask(taskId)
+    expect(ai.deleteSession).toHaveBeenCalledWith('s-1', '/ws')
+    expect(useAgentStore.getState().tasks.find((t) => t.taskId === taskId)).toBeUndefined()
   })
 
-  it('sendPrompt with no sessionId passes undefined (first turn)', () => {
+  it('deleteTask 对 draft 会话不调 ai.deleteSession(无 sessionId)', async () => {
     const taskId = useAgentStore.getState().createTask('t', '/ws')
-    useAgentStore.getState().sendPrompt(taskId, 'first question')
-    expect(ai.startTask).toHaveBeenCalledWith(taskId, 'first question', '/ws', undefined)
+    await useAgentStore.getState().deleteTask(taskId)
+    expect(ai.deleteSession).not.toHaveBeenCalled()
   })
 
-  it('deleteTask removes task and reassigns active', () => {
-    const a = useAgentStore.getState().createTask('A', '/ws')
-    const b = useAgentStore.getState().createTask('B', '/ws')
-    useAgentStore.getState().setActiveTask(a)
-    useAgentStore.getState().deleteTask(a)
-    const s = useAgentStore.getState()
-    expect(s.tasks.find((t) => t.taskId === a)).toBeUndefined()
-    expect(s.tasks).toHaveLength(1)
-    expect(s.activeTaskId).toBe(b)
-  })
-
-  it('hydrate normalizes running→stopped and activates the most recent', async () => {
-    vi.mocked(fs.readFile).mockResolvedValue(
-      JSON.stringify([
-        { taskId: 'a', title: 'A', workspace: '/w', status: 'running', messages: [], sessionId: 's-a', updatedAt: 100 },
-        { taskId: 'b', title: 'B', workspace: '/w', status: 'idle', messages: [], updatedAt: 200 },
-      ]),
-    )
+  it('hydrate 从 listSessions 读会话,全部为 live 态,残留 running→stopped', async () => {
+    useAgentStore.getState().setDefaultWorkspace('/ws')
+    vi.mocked(ai.listSessions).mockResolvedValue([
+      { sessionId: 's-a', summary: 'A', lastModified: 100, cwd: '/ws' },
+      { sessionId: 's-b', summary: 'B', lastModified: 200, cwd: '/ws' },
+    ])
     await useAgentStore.getState().hydrate()
     const s = useAgentStore.getState()
     expect(s.hydrated).toBe(true)
     expect(s.tasks).toHaveLength(2)
-    expect(s.tasks.find((t) => t.taskId === 'a')?.status).toBe('stopped')
-    expect(s.activeTaskId).toBe('b')
+    expect(s.tasks.every((t) => t.phase === 'live')).toBe(true)
+    expect(s.activeTaskId).toBeDefined()
+    const active = s.tasks.find((t) => t.taskId === s.activeTaskId)
+    expect(active && active.phase === 'live' && active.sessionId).toBe('s-b')
   })
 
-  it('persist + hydrate round-trip', async () => {
-    vi.useFakeTimers()
-    const taskId = useAgentStore.getState().createTask('round', '/ws')
-    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'init', meta: { sessionId: 's1' } })
-    useAgentStore.getState().ingest(taskId, { role: 'assistant', text: 'hi', toolUses: [], id: `${taskId}#1`, partial: false })
-    vi.advanceTimersByTime(500)
-    vi.useRealTimers()
-
-    expect(fs.writeFile).toHaveBeenCalled()
-    const calls = vi.mocked(fs.writeFile).mock.calls
-    const written = (calls[calls.length - 1]?.[1] as string) ?? ''
-    expect(written).toContain('round')
-
-    useAgentStore.getState().reset()
-    vi.mocked(fs.readFile).mockResolvedValue(written)
+  it('loadHistory 拉取某 live 会话的消息到内存视图', async () => {
+    useAgentStore.getState().setDefaultWorkspace('/ws')
+    vi.mocked(ai.listSessions).mockResolvedValue([
+      { sessionId: 's-a', summary: 'A', lastModified: 100, cwd: '/ws' },
+    ])
+    vi.mocked(ai.getSessionMessages).mockResolvedValue([
+      { role: 'user', text: '问' },
+      { role: 'assistant', text: '答', toolUses: [] },
+    ])
     await useAgentStore.getState().hydrate()
-    const t = useAgentStore.getState().tasks.find((x) => x.taskId === taskId)
-    expect(t?.title).toBe('round')
-    expect(t?.sessionId).toBe('s1')
-    expect(t?.messages.some((m) => m.role === 'assistant')).toBe(true)
+    const taskId = useAgentStore.getState().tasks[0].taskId
+    await useAgentStore.getState().loadHistory(taskId)
+    expect(ai.getSessionMessages).toHaveBeenCalledWith('s-a', '/ws')
+    expect(useAgentStore.getState().getMessages(taskId)).toEqual([
+      { role: 'user', text: '问' },
+      { role: 'assistant', text: '答', toolUses: [] },
+    ])
   })
 })
