@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { PanelLeft, ChevronRight } from 'lucide-react'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
 import { useAgentStore } from '@/stores/agentStore'
+import { useToastStore } from '@/stores/toastStore'
 import { aiEvents, ai, dialog, fs } from '@/lib/ipc'
 import { summarizeToolInput } from '@/lib/tool-input-summary'
 import type { AgentMessage, AgentTask, AgentTaskStatus, ProviderInfo } from '../../../../shared/agent-types'
@@ -84,7 +85,7 @@ function SessionList({
           {sorted.map((t) => {
         const isActive = t.taskId === activeTaskId
         const meta = STATUS_META[t.status]
-        const turns = t.messages.filter((m) => m.role === 'user').length
+        const turns = useAgentStore.getState().getMessages(t.taskId).filter((m) => m.role === 'user').length
         return (
           <div
             key={t.taskId}
@@ -129,6 +130,10 @@ export default function AgentPanel() {
   const setActiveTask = useAgentStore((s) => s.setActiveTask)
   const deleteTask = useAgentStore((s) => s.deleteTask)
   const hydrate = useAgentStore((s) => s.hydrate)
+  const loadHistory = useAgentStore((s) => s.loadHistory)
+  const activeMessages = useAgentStore((s) =>
+    activeTaskId ? (s._messages[activeTaskId] ?? []) : [],
+  )
 
   const [workspace, setWorkspace] = useState('')
   const [claudeStatus, setClaudeStatus] = useState<ProviderInfo | null>(null)
@@ -156,6 +161,13 @@ export default function AgentPanel() {
     hydrate()
   }, [hydrate])
 
+  // 迁移清理提示
+  useEffect(() => {
+    if (useAgentStore.getState().hydrated && useAgentStore.getState().migratedDropped > 0) {
+      useToastStore.getState().show('已清理旧版会话记录文件')
+    }
+  }, [hydrate])
+
   // 订阅流式消息
   useEffect(() => {
     return aiEvents.onMessage((taskId, msg) => {
@@ -167,18 +179,21 @@ export default function AgentPanel() {
   useEffect(() => {
     stickToBottomRef.current = true
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
-  }, [activeTaskId])
+    if (activeTaskId) {
+      loadHistory(activeTaskId)
+    }
+  }, [activeTaskId, loadHistory])
 
   // 新消息/流式增量：仅在用户未上滑时跟随
   useEffect(() => {
     if (stickToBottomRef.current) {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
     }
-  }, [tasks])
+  }, [activeMessages])
 
   const activeTask = tasks.find((t) => t.taskId === activeTaskId) ?? null
   const isRunning = activeTask?.status === 'running'
-  const lastMsg = activeTask?.messages[activeTask.messages.length - 1]
+  const lastMsg = activeMessages[activeMessages.length - 1]
   // "正在流式输出可见文本"：最后一条是带文本的 partial —— 此时显示光标，而非"思考中"
   const lastIsStreamingText =
     !!lastMsg && lastMsg.role === 'assistant' && !!lastMsg.partial && !!lastMsg.text
@@ -302,7 +317,7 @@ claude   # 登录`}
               点左侧"新会话"或直接输入消息开始
             </div>
           )}
-          {activeTask?.messages.map((m, i) => {
+          {activeMessages.map((m, i) => {
             if (m.role === 'user') {
               return (
                 <div key={i} style={{ alignSelf: 'flex-end', maxWidth: '75%', background: 'rgba(10,132,255,0.18)', border: '1px solid rgba(10,132,255,0.3)', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', fontSize: 12.5, lineHeight: 1.5 }}>
