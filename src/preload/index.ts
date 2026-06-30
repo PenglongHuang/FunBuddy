@@ -128,6 +128,12 @@ const api = {
     ipcRenderer.invoke(IPC.AI_STOP_TASK, taskId),
   aiGetProviderInfo: () =>
     ipcRenderer.invoke(IPC.AI_GET_PROVIDER_INFO),
+  aiListSessions: (dir: string, limit?: number) =>
+    ipcRenderer.invoke(IPC.AI_LIST_SESSIONS, dir, limit),
+  aiGetSessionMessages: (sessionId: string, dir: string) =>
+    ipcRenderer.invoke(IPC.AI_GET_SESSION_MESSAGES, sessionId, dir),
+  aiDeleteSession: (sessionId: string, dir: string) =>
+    ipcRenderer.invoke(IPC.AI_DELETE_SESSION, sessionId, dir),
   onAiMessage: (callback: (taskId: string, msg: unknown) => void) => {
     const handler = (_e: any, data: { taskId: string; msg: unknown }) => callback(data.taskId, data.msg)
     ipcRenderer.on(IPC.AI_MESSAGE, handler)

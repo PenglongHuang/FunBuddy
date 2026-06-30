@@ -140,6 +140,12 @@ export const ai = {
     window.api.aiStopTask(taskId),
   getProviderInfo: (): Promise<{ providerId: string; displayName: string; available: boolean; version?: string }> =>
     window.api.aiGetProviderInfo(),
+  listSessions: (dir: string, limit?: number) =>
+    window.api.aiListSessions(dir, limit),
+  getSessionMessages: (sessionId: string, dir: string) =>
+    window.api.aiGetSessionMessages(sessionId, dir),
+  deleteSession: (sessionId: string, dir: string) =>
+    window.api.aiDeleteSession(sessionId, dir),
 }
 
 export const aiEvents = {
