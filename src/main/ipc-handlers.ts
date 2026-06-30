@@ -5,6 +5,7 @@ import { join, dirname, resolve, parse as parsePath } from 'path'
 import { tmpdir } from 'os'
 import { getStore } from './store'
 import { startTask, stopTask, getProviderInfo } from './claude-service'
+import { listAgentSessions, getAgentSessionMessages, deleteAgentSession } from './agents/sessions'
 import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode, startPetCursorTracking, stopPetCursorTracking, setPetDragging, movePetDrag, toggleAlwaysOnTop } from './window'
 import { IPC } from '../shared/ipc-channels'
 import { registerHotkeys } from './hotkey'
@@ -469,4 +470,13 @@ export function registerIpcHandlers(): void {
     stopTask(taskId)
   })
   ipcMain.handle(IPC.AI_GET_PROVIDER_INFO, () => getProviderInfo())
+  ipcMain.handle(IPC.AI_LIST_SESSIONS, (_e, dir: string, limit?: number) =>
+    listAgentSessions({ dir, limit }),
+  )
+  ipcMain.handle(IPC.AI_GET_SESSION_MESSAGES, (_e, sessionId: string, dir: string) =>
+    getAgentSessionMessages(sessionId, { dir }),
+  )
+  ipcMain.handle(IPC.AI_DELETE_SESSION, (_e, sessionId: string, dir: string) =>
+    deleteAgentSession(sessionId, dir),
+  )
 }

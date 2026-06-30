@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { PanelLeft, ChevronRight } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
 import { useAgentStore } from '@/stores/agentStore'
+import { useToastStore } from '@/stores/toastStore'
 import { aiEvents, ai, dialog, fs } from '@/lib/ipc'
 import { summarizeToolInput } from '@/lib/tool-input-summary'
 import type { AgentMessage, AgentTask, AgentTaskStatus, ProviderInfo } from '../../../../shared/agent-types'
@@ -74,6 +76,19 @@ function SessionList({
   collapsed: boolean
 }) {
   const sorted = [...tasks].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+  // 响应式订阅每个会话的用户消息轮数。 getState() 非响应式读,历史回填后侧栏"X 轮"
+  // 不会刷新;这里用 useShallow 派生出 { taskId: count } 对象,浅比较下仅当某轮数真正
+  // 变化才触发重渲。
+  const turnCounts = useAgentStore(
+    useShallow((s) =>
+      Object.fromEntries(
+        s.tasks.map((t) => [
+          t.taskId,
+          (s._messages[t.taskId] ?? []).filter((m) => m.role === 'user').length,
+        ]),
+      ),
+    ),
+  )
   return (
     <div style={{ width: collapsed ? 0 : 172, flexShrink: 0, borderRight: collapsed ? 'none' : '0.5px solid rgba(255,255,255,0.08)', padding: collapsed ? 0 : '8px 6px', display: 'flex', flexDirection: 'column', gap: 6, background: 'rgba(0,0,0,0.18)', overflowX: 'hidden', overflowY: collapsed ? 'hidden' : 'auto', transition: 'width .18s ease, padding .18s ease' }}>
       {!collapsed && (
@@ -84,7 +99,7 @@ function SessionList({
           {sorted.map((t) => {
         const isActive = t.taskId === activeTaskId
         const meta = STATUS_META[t.status]
-        const turns = t.messages.filter((m) => m.role === 'user').length
+        const turns = turnCounts[t.taskId] ?? 0
         return (
           <div
             key={t.taskId}
@@ -129,6 +144,15 @@ export default function AgentPanel() {
   const setActiveTask = useAgentStore((s) => s.setActiveTask)
   const deleteTask = useAgentStore((s) => s.deleteTask)
   const hydrate = useAgentStore((s) => s.hydrate)
+  const loadHistory = useAgentStore((s) => s.loadHistory)
+  const hydrated = useAgentStore((s) => s.hydrated)
+  const migratedDropped = useAgentStore((s) => s.migratedDropped)
+  // useShallow:activeTaskId 为 null 或会话尚未加载时,`?? []`/`: []` 每次返回新空数组,
+  // zustand v5 底层 useSyncExternalStore 会判定 store 变化 → 无限渲染(Maximum update depth exceeded)。
+  // 浅比较让两个空数组判等,稳定引用,终止循环。
+  const activeMessages = useAgentStore(
+    useShallow((s) => (activeTaskId ? (s._messages[activeTaskId] ?? []) : [])),
+  )
 
   const [workspace, setWorkspace] = useState('')
   const [claudeStatus, setClaudeStatus] = useState<ProviderInfo | null>(null)
@@ -156,6 +180,13 @@ export default function AgentPanel() {
     hydrate()
   }, [hydrate])
 
+  // 迁移清理提示
+  useEffect(() => {
+    if (hydrated && migratedDropped > 0) {
+      useToastStore.getState().show('已清理旧版会话记录文件')
+    }
+  }, [hydrated, migratedDropped])
+
   // 订阅流式消息
   useEffect(() => {
     return aiEvents.onMessage((taskId, msg) => {
@@ -167,18 +198,21 @@ export default function AgentPanel() {
   useEffect(() => {
     stickToBottomRef.current = true
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
-  }, [activeTaskId])
+    if (activeTaskId) {
+      loadHistory(activeTaskId)
+    }
+  }, [activeTaskId, loadHistory])
 
   // 新消息/流式增量：仅在用户未上滑时跟随
   useEffect(() => {
     if (stickToBottomRef.current) {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
     }
-  }, [tasks])
+  }, [activeMessages])
 
   const activeTask = tasks.find((t) => t.taskId === activeTaskId) ?? null
   const isRunning = activeTask?.status === 'running'
-  const lastMsg = activeTask?.messages[activeTask.messages.length - 1]
+  const lastMsg = activeMessages[activeMessages.length - 1]
   // "正在流式输出可见文本"：最后一条是带文本的 partial —— 此时显示光标，而非"思考中"
   const lastIsStreamingText =
     !!lastMsg && lastMsg.role === 'assistant' && !!lastMsg.partial && !!lastMsg.text
@@ -302,7 +336,7 @@ claude   # 登录`}
               点左侧"新会话"或直接输入消息开始
             </div>
           )}
-          {activeTask?.messages.map((m, i) => {
+          {activeMessages.map((m, i) => {
             if (m.role === 'user') {
               return (
                 <div key={i} style={{ alignSelf: 'flex-end', maxWidth: '75%', background: 'rgba(10,132,255,0.18)', border: '1px solid rgba(10,132,255,0.3)', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', fontSize: 12.5, lineHeight: 1.5 }}>

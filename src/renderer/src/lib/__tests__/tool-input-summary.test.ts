@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { summarizeToolInput } from './tool-input-summary'
+import { summarizeToolInput } from '../tool-input-summary'
 
 describe('summarizeToolInput', () => {
   it('Read 取 file_path 的 basename', () => {

@@ -42,6 +42,20 @@ export interface FunBuddyAPI {
   aiStartTask: (taskId: string, prompt: string, workspace: string, sessionId?: string) => Promise<void>
   aiStopTask: (taskId: string) => Promise<void>
   aiGetProviderInfo: () => Promise<{ providerId: string; displayName: string; available: boolean; version?: string }>
+  aiListSessions: (dir: string, limit?: number) => Promise<Array<{
+    sessionId: string
+    summary: string
+    lastModified: number
+    fileSize?: number
+    customTitle?: string
+    firstPrompt?: string
+    gitBranch?: string
+    cwd?: string
+    tag?: string
+    createdAt?: number
+  }>>
+  aiGetSessionMessages: (sessionId: string, dir: string) => Promise<import('../shared/agent-types').AgentMessage[]>
+  aiDeleteSession: (sessionId: string, dir: string) => Promise<void>
   onAiMessage: (callback: (taskId: string, msg: unknown) => void) => () => void
 
   // Image

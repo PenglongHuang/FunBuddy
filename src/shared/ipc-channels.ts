@@ -58,4 +58,7 @@ export const IPC = {
   AI_STOP_TASK: 'ai:stopTask',
   AI_GET_PROVIDER_INFO: 'ai:getProviderInfo',
   AI_MESSAGE: 'ai:message',
+  AI_LIST_SESSIONS: 'ai:listSessions',
+  AI_GET_SESSION_MESSAGES: 'ai:getSessionMessages',
+  AI_DELETE_SESSION: 'ai:deleteSession',
 } as const

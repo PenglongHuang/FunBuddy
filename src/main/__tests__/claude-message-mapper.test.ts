@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mapToAgentMessage } from './claude-message-mapper'
+import { mapToAgentMessage } from '../claude-message-mapper'
 
 describe('mapToAgentMessage', () => {
   it('maps system init to system init with sessionId + model', () => {
