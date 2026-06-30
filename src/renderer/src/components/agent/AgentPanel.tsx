@@ -131,6 +131,8 @@ export default function AgentPanel() {
   const deleteTask = useAgentStore((s) => s.deleteTask)
   const hydrate = useAgentStore((s) => s.hydrate)
   const loadHistory = useAgentStore((s) => s.loadHistory)
+  const hydrated = useAgentStore((s) => s.hydrated)
+  const migratedDropped = useAgentStore((s) => s.migratedDropped)
   const activeMessages = useAgentStore((s) =>
     activeTaskId ? (s._messages[activeTaskId] ?? []) : [],
   )
@@ -163,10 +165,10 @@ export default function AgentPanel() {
 
   // 迁移清理提示
   useEffect(() => {
-    if (useAgentStore.getState().hydrated && useAgentStore.getState().migratedDropped > 0) {
+    if (hydrated && migratedDropped > 0) {
       useToastStore.getState().show('已清理旧版会话记录文件')
     }
-  }, [hydrate])
+  }, [hydrated, migratedDropped])
 
   // 订阅流式消息
   useEffect(() => {
