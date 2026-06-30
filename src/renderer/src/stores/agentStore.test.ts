@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { ai } from '@/lib/ipc'
+import { ai, fs } from '@/lib/ipc'
 import { useAgentStore } from './agentStore'
 
 vi.mock('@/lib/ipc', () => ({
@@ -16,6 +16,7 @@ vi.mock('@/lib/ipc', () => ({
     writeFile: vi.fn().mockResolvedValue(undefined),
     exists: vi.fn().mockResolvedValue(false),
     deleteFile: vi.fn().mockResolvedValue(undefined),
+    getStorageDir: vi.fn().mockResolvedValue('/ws'),
   },
 }))
 
@@ -132,5 +133,34 @@ describe('agentStore', () => {
       { role: 'user', text: '问' },
       { role: 'assistant', text: '答', toolUses: [] },
     ])
+  })
+
+  it('hydrate 在 defaultWorkspace 为空时从 fs.getStorageDir fallback', async () => {
+    // 不 seed defaultWorkspace;模拟冷启动竞态(defaultWorkspace 跨 reset 持久化,需显式清空)
+    useAgentStore.getState().setDefaultWorkspace('')
+    vi.mocked(fs.getStorageDir).mockResolvedValue('/ws')
+    vi.mocked(ai.listSessions).mockResolvedValue([
+      { sessionId: 's-x', summary: 'X', lastModified: 50, cwd: '/ws' },
+    ])
+    await useAgentStore.getState().hydrate()
+    const s = useAgentStore.getState()
+    expect(fs.getStorageDir).toHaveBeenCalled()
+    expect(s.defaultWorkspace).toBe('/ws')
+    expect(s.tasks).toHaveLength(1)
+    expect(s.tasks[0].phase).toBe('live')
+  })
+
+  it('loadHistory 空会话只 fetch 一次(_loaded 防重复)', async () => {
+    vi.mocked(ai.listSessions).mockResolvedValue([
+      { sessionId: 's-empty', summary: 'E', lastModified: 1, cwd: '/ws' },
+    ])
+    vi.mocked(ai.getSessionMessages).mockResolvedValue([]) // 空消息
+    useAgentStore.getState().setDefaultWorkspace('/ws')
+    await useAgentStore.getState().hydrate()
+    const taskId = useAgentStore.getState().tasks[0].taskId
+    await useAgentStore.getState().loadHistory(taskId)
+    await useAgentStore.getState().loadHistory(taskId) // 第二次应跳过
+    expect(ai.getSessionMessages).toHaveBeenCalledTimes(1)
+    expect(useAgentStore.getState().getMessages(taskId)).toEqual([])
   })
 })

@@ -2,8 +2,6 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { nanoid } from 'nanoid'
 import { ai, fs } from '@/lib/ipc'
-import { useSettingsStore } from './settingsStore'
-import { useToastStore } from './toastStore'
 import type { AgentMessage, AgentTask } from '../../../shared/agent-types'
 
 /**
@@ -20,6 +18,7 @@ interface AgentStore {
   /** 旧 agent-sessions.json 迁移时丢弃的失效记录数(用于首启 toast) */
   migratedDropped: number
   _messages: MessageMap
+  _loaded: Record<string, true>
   setDefaultWorkspace: (ws: string) => void
   createTask: (title: string, workspace: string) => string
   sendPrompt: (taskId: string, prompt: string) => void
@@ -44,6 +43,7 @@ export const useAgentStore = create<AgentStore>()(
     hydrated: false,
     migratedDropped: 0,
     _messages: {},
+    _loaded: {},
 
     setDefaultWorkspace: (ws) => set((s) => { s.defaultWorkspace = ws }),
 
@@ -94,16 +94,17 @@ export const useAgentStore = create<AgentStore>()(
         const t = s.tasks.find((x) => x.taskId === taskId)
         if (!t) return
 
-        // init:把 draft 升级为 live,绑定 sessionId
+        // init:把 draft 升级为 live,绑定 sessionId。
+        // 重复 init(已 live)是 no-op——provider 重启/重放不覆盖已有 sessionId。
         if (msg.role === 'system' && msg.kind === 'init') {
           const sid = msg.meta?.sessionId
-          if (sid && t.phase === 'draft') {
+          if (typeof sid === 'string' && sid && t.phase === 'draft') {
             const idx = s.tasks.findIndex((x) => x.taskId === taskId)
             if (idx >= 0) {
               s.tasks[idx] = {
                 phase: 'live',
                 taskId: t.taskId,
-                sessionId: String(sid),
+                sessionId: sid,
                 title: t.title,
                 workspace: t.workspace,
                 status: t.status,
@@ -165,6 +166,7 @@ export const useAgentStore = create<AgentStore>()(
       set((s) => {
         s.tasks = s.tasks.filter((t) => t.taskId !== taskId)
         delete s._messages[taskId]
+        delete s._loaded[taskId]
         if (s.activeTaskId === taskId) {
           s.activeTaskId = s.tasks[0]?.taskId ?? null
         }
@@ -175,7 +177,18 @@ export const useAgentStore = create<AgentStore>()(
       if (get().hydrated) return
       await migrateLegacySessions(set)
 
-      const workspace = get().defaultWorkspace
+      let workspace = get().defaultWorkspace
+      if (!workspace) {
+        try {
+          const dir = await fs.getStorageDir()
+          if (dir) {
+            workspace = dir
+            set((s) => { s.defaultWorkspace = dir })
+          }
+        } catch {
+          /* 取不到 workspace 就跳过 listSessions */
+        }
+      }
       let sessions: { sessionId: string; summary: string; lastModified: number; cwd?: string }[] = []
       if (workspace) {
         try {
@@ -205,19 +218,22 @@ export const useAgentStore = create<AgentStore>()(
     loadHistory: async (taskId) => {
       const task = get().tasks.find((t) => t.taskId === taskId)
       if (task?.phase !== 'live') return
-      if ((get()._messages[taskId]?.length ?? 0) > 0) return
+      if (get()._loaded[taskId]) return
       try {
         const msgs = await ai.getSessionMessages(task.sessionId, task.workspace)
-        set((s) => { s._messages[taskId] = msgs })
+        set((s) => {
+          s._messages[taskId] = msgs
+          s._loaded[taskId] = true
+        })
       } catch {
-        /* 拉取失败保持空视图 */
+        /* 拉取失败保持空视图,不标记 loaded,下次可重试 */
       }
     },
 
     getMessages: (taskId) => get()._messages[taskId] ?? [],
 
     reset: () => {
-      set({ tasks: [], activeTaskId: null, hydrated: false, _messages: {}, migratedDropped: 0 })
+      set({ tasks: [], activeTaskId: null, hydrated: false, _messages: {}, _loaded: {}, migratedDropped: 0 })
     },
   })),
 )
