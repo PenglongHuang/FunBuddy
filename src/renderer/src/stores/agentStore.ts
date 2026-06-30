@@ -208,8 +208,8 @@ export const useAgentStore = create<AgentStore>()(
       }))
       const sorted = [...tasks].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
       set((s) => {
-        s.tasks = tasks
-        for (const t of tasks) s._messages[t.taskId] = []
+        s.tasks = sorted
+        for (const t of sorted) s._messages[t.taskId] = []
         s.activeTaskId = sorted[0]?.taskId ?? null
         s.hydrated = true
       })
@@ -222,6 +222,11 @@ export const useAgentStore = create<AgentStore>()(
       try {
         const msgs = await ai.getSessionMessages(task.sessionId, task.workspace)
         set((s) => {
+          // 若 await 期间已有运行时内容(用户发送/流式),不覆盖——只标记 loaded
+          if ((s._messages[taskId]?.length ?? 0) > 0) {
+            s._loaded[taskId] = true
+            return
+          }
           s._messages[taskId] = msgs
           s._loaded[taskId] = true
         })

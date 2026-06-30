@@ -163,4 +163,32 @@ describe('agentStore', () => {
     expect(ai.getSessionMessages).toHaveBeenCalledTimes(1)
     expect(useAgentStore.getState().getMessages(taskId)).toEqual([])
   })
+
+  it('loadHistory 不覆盖 await 期间到达的运行时消息', async () => {
+    vi.mocked(ai.listSessions).mockResolvedValue([
+      { sessionId: 's-h', summary: 'H', lastModified: 1, cwd: '/ws' },
+    ])
+    useAgentStore.getState().setDefaultWorkspace('/ws')
+    await useAgentStore.getState().hydrate()
+    const taskId = useAgentStore.getState().tasks[0].taskId
+
+    let resolveGet: (v: any) => void = () => {}
+    vi.mocked(ai.getSessionMessages).mockReturnValue(
+      new Promise((r) => { resolveGet = r }),
+    )
+
+    const loadPromise = useAgentStore.getState().loadHistory(taskId)
+    // await 期间:一条流式 assistant 消息到达(运行时内容)
+    useAgentStore.getState().ingest(taskId, { role: 'assistant', text: '流式中', toolUses: [] })
+    resolveGet([{ role: 'assistant', text: '历史回复', toolUses: [] }])
+    await loadPromise
+
+    // 历史不覆盖运行时消息
+    expect(useAgentStore.getState().getMessages(taskId)).toEqual([
+      { role: 'assistant', text: '流式中', toolUses: [] },
+    ])
+    expect(useAgentStore.getState()._loaded[taskId]).toBe(true)
+    await useAgentStore.getState().loadHistory(taskId)
+    expect(ai.getSessionMessages).toHaveBeenCalledTimes(1)
+  })
 })
