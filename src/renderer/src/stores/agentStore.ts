@@ -251,8 +251,12 @@ async function migrateLegacySessions(
   set: (fn: (s: AgentStore) => void) => void,
 ): Promise<void> {
   try {
-    const raw = await fs.readFile('agent-sessions.json').catch(() => null)
-    if (!raw) return
+    // 先 exists 再读:旧文件几乎必然不存在(仅老用户升级首启才存在)。
+    // 直接 readFile 会让主进程 fs:readFile handler 在 reject 前打印
+    // "Error occurred in handler for 'fs:readFile': ENOENT ..."——每次启动噪音。
+    // exists 走 existsSync,不抛错、不打日志。
+    if (!(await fs.exists('agent-sessions.json'))) return
+    const raw = await fs.readFile('agent-sessions.json')
     const legacy = JSON.parse(raw) as unknown[]
     set((s) => { s.migratedDropped = Array.isArray(legacy) ? legacy.length : 0 })
     await fs.deleteFile('agent-sessions.json').catch(() => {})

@@ -191,4 +191,25 @@ describe('agentStore', () => {
     await useAgentStore.getState().loadHistory(taskId)
     expect(ai.getSessionMessages).toHaveBeenCalledTimes(1)
   })
+
+  it('hydrate 迁移:旧文件不存在时不调 readFile(避免主进程 ENOENT 日志噪音)', async () => {
+    vi.mocked(fs.exists).mockResolvedValue(false)
+    useAgentStore.getState().setDefaultWorkspace('/ws')
+    vi.mocked(ai.listSessions).mockResolvedValue([])
+    await useAgentStore.getState().hydrate()
+    expect(fs.exists).toHaveBeenCalledWith('agent-sessions.json')
+    expect(fs.readFile).not.toHaveBeenCalled()
+    expect(useAgentStore.getState().migratedDropped).toBe(0)
+  })
+
+  it('hydrate 迁移:旧文件存在时记 migratedDropped 并删除', async () => {
+    vi.mocked(fs.exists).mockResolvedValue(true)
+    vi.mocked(fs.readFile).mockResolvedValue('[{"a":1},{"a":2}]')
+    useAgentStore.getState().setDefaultWorkspace('/ws')
+    vi.mocked(ai.listSessions).mockResolvedValue([])
+    await useAgentStore.getState().hydrate()
+    expect(fs.readFile).toHaveBeenCalledWith('agent-sessions.json')
+    expect(useAgentStore.getState().migratedDropped).toBe(2)
+    expect(fs.deleteFile).toHaveBeenCalledWith('agent-sessions.json')
+  })
 })
