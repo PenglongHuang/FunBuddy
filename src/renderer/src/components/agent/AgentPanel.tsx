@@ -76,6 +76,19 @@ function SessionList({
   collapsed: boolean
 }) {
   const sorted = [...tasks].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+  // 响应式订阅每个会话的用户消息轮数。 getState() 非响应式读,历史回填后侧栏"X 轮"
+  // 不会刷新;这里用 useShallow 派生出 { taskId: count } 对象,浅比较下仅当某轮数真正
+  // 变化才触发重渲。
+  const turnCounts = useAgentStore(
+    useShallow((s) =>
+      Object.fromEntries(
+        s.tasks.map((t) => [
+          t.taskId,
+          (s._messages[t.taskId] ?? []).filter((m) => m.role === 'user').length,
+        ]),
+      ),
+    ),
+  )
   return (
     <div style={{ width: collapsed ? 0 : 172, flexShrink: 0, borderRight: collapsed ? 'none' : '0.5px solid rgba(255,255,255,0.08)', padding: collapsed ? 0 : '8px 6px', display: 'flex', flexDirection: 'column', gap: 6, background: 'rgba(0,0,0,0.18)', overflowX: 'hidden', overflowY: collapsed ? 'hidden' : 'auto', transition: 'width .18s ease, padding .18s ease' }}>
       {!collapsed && (
@@ -86,7 +99,7 @@ function SessionList({
           {sorted.map((t) => {
         const isActive = t.taskId === activeTaskId
         const meta = STATUS_META[t.status]
-        const turns = useAgentStore.getState().getMessages(t.taskId).filter((m) => m.role === 'user').length
+        const turns = turnCounts[t.taskId] ?? 0
         return (
           <div
             key={t.taskId}

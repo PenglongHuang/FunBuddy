@@ -10,6 +10,14 @@ import type { AgentMessage, AgentTask } from '../../../shared/agent-types'
  */
 type MessageMap = Record<string, AgentMessage[]>
 
+/**
+ * in-flight 去重:StrictMode 下 effect 会连发两次,两次都会通过 `hydrated`/`_loaded`
+ * 检查(它们在 await 之后才置位),导致重复拉取/覆盖。槽位记录"正在进行的 promise",
+ * 第二次调用直接复用同一个,既不重复也不覆盖。失败时清槽位以保留重试能力。
+ */
+let hydrateInFlight: Promise<void> | null = null
+const loadHistoryInFlight = new Map<string, Promise<void>>()
+
 interface AgentStore {
   tasks: AgentTask[]
   activeTaskId: string | null
@@ -175,64 +183,84 @@ export const useAgentStore = create<AgentStore>()(
 
     hydrate: async () => {
       if (get().hydrated) return
-      await migrateLegacySessions(set)
+      // StrictMode 重挂会在首个 await 返回前再发一次;复用同一 promise 避免重复拉取/覆盖。
+      if (hydrateInFlight) return hydrateInFlight
+      hydrateInFlight = (async () => {
+        try {
+          await migrateLegacySessions(set)
 
-      let workspace = get().defaultWorkspace
-      if (!workspace) {
-        try {
-          const dir = await fs.getStorageDir()
-          if (dir) {
-            workspace = dir
-            set((s) => { s.defaultWorkspace = dir })
+          let workspace = get().defaultWorkspace
+          if (!workspace) {
+            try {
+              const dir = await fs.getStorageDir()
+              if (dir) {
+                workspace = dir
+                set((s) => { s.defaultWorkspace = dir })
+              }
+            } catch {
+              /* 取不到 workspace 就跳过 listSessions */
+            }
           }
-        } catch {
-          /* 取不到 workspace 就跳过 listSessions */
+          let sessions: { sessionId: string; summary: string; lastModified: number; cwd?: string }[] = []
+          if (workspace) {
+            try {
+              sessions = await ai.listSessions(workspace)
+            } catch {
+              sessions = []
+            }
+          }
+          const tasks: AgentTask[] = sessions.map((sess) => ({
+            phase: 'live',
+            taskId: sess.sessionId, // live 态直接用 sessionId 当 taskId,简化映射
+            sessionId: sess.sessionId,
+            title: sess.summary,
+            workspace: sess.cwd ?? workspace,
+            status: 'idle',
+            updatedAt: sess.lastModified,
+          }))
+          const sorted = [...tasks].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+          set((s) => {
+            s.tasks = sorted
+            for (const t of sorted) s._messages[t.taskId] = []
+            s.activeTaskId = sorted[0]?.taskId ?? null
+            s.hydrated = true
+          })
+        } finally {
+          hydrateInFlight = null
         }
-      }
-      let sessions: { sessionId: string; summary: string; lastModified: number; cwd?: string }[] = []
-      if (workspace) {
-        try {
-          sessions = await ai.listSessions(workspace)
-        } catch {
-          sessions = []
-        }
-      }
-      const tasks: AgentTask[] = sessions.map((sess) => ({
-        phase: 'live',
-        taskId: sess.sessionId, // live 态直接用 sessionId 当 taskId,简化映射
-        sessionId: sess.sessionId,
-        title: sess.summary,
-        workspace: sess.cwd ?? workspace,
-        status: 'idle',
-        updatedAt: sess.lastModified,
-      }))
-      const sorted = [...tasks].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
-      set((s) => {
-        s.tasks = sorted
-        for (const t of sorted) s._messages[t.taskId] = []
-        s.activeTaskId = sorted[0]?.taskId ?? null
-        s.hydrated = true
-      })
+      })()
+      return hydrateInFlight
     },
 
     loadHistory: async (taskId) => {
       const task = get().tasks.find((t) => t.taskId === taskId)
       if (task?.phase !== 'live') return
       if (get()._loaded[taskId]) return
-      try {
-        const msgs = await ai.getSessionMessages(task.sessionId, task.workspace)
-        set((s) => {
-          // 若 await 期间已有运行时内容(用户发送/流式),不覆盖——只标记 loaded
-          if ((s._messages[taskId]?.length ?? 0) > 0) {
+      // StrictMode 会连发两次,且 _loaded 在 await 后才置位;复用同一 promise 杜绝重复拉取/翻倍合并。
+      const existing = loadHistoryInFlight.get(taskId)
+      if (existing) return existing
+      const promise = (async () => {
+        try {
+          const msgs = await ai.getSessionMessages(task.sessionId, task.workspace)
+          set((s) => {
+            // 仅当会话真在运行(status==='running')时才不动——那是实时流式,不能被历史冲掉。
+            // 否则合并:历史在前,await 期间进来的运行时消息(如用户刚发的一句)在后。
+            const t = s.tasks.find((x) => x.taskId === taskId)
+            if (t?.status === 'running') {
+              s._loaded[taskId] = true
+              return
+            }
+            s._messages[taskId] = [...msgs, ...(s._messages[taskId] ?? [])]
             s._loaded[taskId] = true
-            return
-          }
-          s._messages[taskId] = msgs
-          s._loaded[taskId] = true
-        })
-      } catch {
-        /* 拉取失败保持空视图,不标记 loaded,下次可重试 */
-      }
+          })
+        } catch {
+          /* 拉取失败保持空视图,不标记 loaded,下次可重试 */
+        } finally {
+          loadHistoryInFlight.delete(taskId)
+        }
+      })()
+      loadHistoryInFlight.set(taskId, promise)
+      return promise
     },
 
     getMessages: (taskId) => get()._messages[taskId] ?? [],

@@ -164,13 +164,14 @@ describe('agentStore', () => {
     expect(useAgentStore.getState().getMessages(taskId)).toEqual([])
   })
 
-  it('loadHistory 不覆盖 await 期间到达的运行时消息', async () => {
+  it('loadHistory 非 running 时合并:历史在前,await 期间到达的运行时消息在后', async () => {
     vi.mocked(ai.listSessions).mockResolvedValue([
       { sessionId: 's-h', summary: 'H', lastModified: 1, cwd: '/ws' },
     ])
     useAgentStore.getState().setDefaultWorkspace('/ws')
     await useAgentStore.getState().hydrate()
     const taskId = useAgentStore.getState().tasks[0].taskId
+    // hydrate 出来的会话默认 idle(非 running)
 
     let resolveGet: (v: any) => void = () => {}
     vi.mocked(ai.getSessionMessages).mockReturnValue(
@@ -178,18 +179,60 @@ describe('agentStore', () => {
     )
 
     const loadPromise = useAgentStore.getState().loadHistory(taskId)
-    // await 期间:一条流式 assistant 消息到达(运行时内容)
+    // await 期间:一条运行时 assistant 消息到达(如用户刚发的回合)
     useAgentStore.getState().ingest(taskId, { role: 'assistant', text: '流式中', toolUses: [] })
     resolveGet([{ role: 'assistant', text: '历史回复', toolUses: [] }])
     await loadPromise
 
-    // 历史不覆盖运行时消息
+    // 修复后:历史 + 运行时合并,都不丢(历史在前)
     expect(useAgentStore.getState().getMessages(taskId)).toEqual([
+      { role: 'assistant', text: '历史回复', toolUses: [] },
       { role: 'assistant', text: '流式中', toolUses: [] },
     ])
     expect(useAgentStore.getState()._loaded[taskId]).toBe(true)
     await useAgentStore.getState().loadHistory(taskId)
     expect(ai.getSessionMessages).toHaveBeenCalledTimes(1)
+  })
+
+  it('loadHistory 会话正在 running 时不覆盖实时流式输出', async () => {
+    vi.mocked(ai.listSessions).mockResolvedValue([
+      { sessionId: 's-run', summary: 'R', lastModified: 1, cwd: '/ws' },
+    ])
+    useAgentStore.getState().setDefaultWorkspace('/ws')
+    await useAgentStore.getState().hydrate()
+    const taskId = useAgentStore.getState().tasks[0].taskId
+    // 模拟该会话正在流式:sendPrompt 会把 status 置 running
+    useAgentStore.getState().sendPrompt(taskId, '追问')
+    expect(useAgentStore.getState().tasks[0].status).toBe('running')
+
+    vi.mocked(ai.getSessionMessages).mockResolvedValue([
+      { role: 'assistant', text: '历史回复', toolUses: [] },
+    ])
+    await useAgentStore.getState().loadHistory(taskId)
+
+    // running 态:历史不冲掉实时输出;只保留运行时那条(sendPrompt 写入的用户消息)
+    expect(useAgentStore.getState().getMessages(taskId)).toEqual([
+      { role: 'user', text: '追问' },
+    ])
+    expect(useAgentStore.getState()._loaded[taskId]).toBe(true)
+  })
+
+  it('hydrate 并发去重:StrictMode 连发两次只拉一次 listSessions', async () => {
+    let resolveList: (v: any) => void = () => {}
+    vi.mocked(ai.listSessions).mockReturnValue(
+      new Promise((r) => { resolveList = r }),
+    )
+    useAgentStore.getState().setDefaultWorkspace('/ws')
+
+    // 模拟 StrictMode 重挂:首个 await 未返回时再发一次
+    const p1 = useAgentStore.getState().hydrate()
+    const p2 = useAgentStore.getState().hydrate()
+    resolveList([{ sessionId: 's-d', summary: 'D', lastModified: 1, cwd: '/ws' }])
+    await Promise.all([p1, p2])
+
+    expect(ai.listSessions).toHaveBeenCalledTimes(1)
+    expect(useAgentStore.getState().hydrated).toBe(true)
+    expect(useAgentStore.getState().tasks).toHaveLength(1)
   })
 
   it('hydrate 迁移:旧文件不存在时不调 readFile(避免主进程 ENOENT 日志噪音)', async () => {
