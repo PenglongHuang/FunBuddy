@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { PanelLeft, ChevronRight } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
 import { useAgentStore } from '@/stores/agentStore'
 import { useToastStore } from '@/stores/toastStore'
@@ -133,8 +134,11 @@ export default function AgentPanel() {
   const loadHistory = useAgentStore((s) => s.loadHistory)
   const hydrated = useAgentStore((s) => s.hydrated)
   const migratedDropped = useAgentStore((s) => s.migratedDropped)
-  const activeMessages = useAgentStore((s) =>
-    activeTaskId ? (s._messages[activeTaskId] ?? []) : [],
+  // useShallow:activeTaskId 为 null 或会话尚未加载时,`?? []`/`: []` 每次返回新空数组,
+  // zustand v5 底层 useSyncExternalStore 会判定 store 变化 → 无限渲染(Maximum update depth exceeded)。
+  // 浅比较让两个空数组判等,稳定引用,终止循环。
+  const activeMessages = useAgentStore(
+    useShallow((s) => (activeTaskId ? (s._messages[activeTaskId] ?? []) : [])),
   )
 
   const [workspace, setWorkspace] = useState('')
