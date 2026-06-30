@@ -4,6 +4,7 @@ import { mapToAgentMessage } from '../claude-message-mapper'
 import { TurnAssembler, type StreamEvent } from '../claude-stream-assembler'
 import type { AgentMessage, ProviderInfo } from '../../shared/agent-types'
 import type { CodingAgentProvider, ProviderStartOptions } from './types'
+import { NOTES_SYSTEM_PROMPT } from './notes-system-prompt'
 
 /** partial 转发节流间隔:避免每个 token 都触发 IPC+重渲染 */
 const PARTIAL_THROTTLE_MS = 40
@@ -134,6 +135,7 @@ export const claudeCodeProvider: CodingAgentProvider = {
         allowDangerouslySkipPermissions: true,
         includePartialMessages: true,
         abortController: controller,
+        systemPrompt: { type: 'preset', preset: 'claude_code', append: NOTES_SYSTEM_PROMPT },
         ...(sessionId ? { resume: sessionId } : {}),
       },
     })
