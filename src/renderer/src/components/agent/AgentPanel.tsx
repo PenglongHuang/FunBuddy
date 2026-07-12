@@ -20,6 +20,9 @@ const STATUS_META: Record<AgentTaskStatus, { dot: string; label: string; color: 
   stopped: { dot: '○', label: '已停止', color: 'rgba(255,255,255,0.4)' },
 }
 
+/** 系统级错误横幅的共享样式(kind==='error' 与 result+isError 复用)。 */
+const SYSTEM_ERROR_STYLE = { alignSelf: 'center', fontSize: 11, color: '#FF453a' } as const
+
 function ToolPills({ toolUses }: { toolUses: { name: string; input?: unknown }[] }) {
   const [expanded, setExpanded] = useState<number | null>(null)
   if (toolUses.length === 0) return null
@@ -360,7 +363,13 @@ claude   # 登录`}
             }
             // system
             if (m.kind === 'error') {
-              return <div key={i} style={{ alignSelf: 'center', fontSize: 11, color: '#FF453a' }}>⚠ 出错了{(m.meta as { error?: string })?.error ? `:${(m.meta as { error?: string }).error}` : ''}</div>
+              const error = (m.meta as { error?: string })?.error
+              return <div key={i} style={SYSTEM_ERROR_STYLE}>⚠ 出错了{error ? `: ${error}` : ''}</div>
+            }
+            if (m.kind === 'result' && (m.meta as { isError?: boolean })?.isError) {
+              const meta = m.meta as { result?: string; subtype?: string }
+              const detail = meta.result || meta.subtype
+              return <div key={i} style={SYSTEM_ERROR_STYLE}>⚠ 任务执行出错{detail ? `: ${detail}` : ''}</div>
             }
             return null
           })}

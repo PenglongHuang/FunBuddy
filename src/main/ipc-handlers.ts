@@ -11,6 +11,7 @@ import { IPC } from '../shared/ipc-channels'
 import { registerHotkeys } from './hotkey'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
+import { logger } from './logger'
 
 export function registerIpcHandlers(): void {
   const store = getStore()
@@ -319,6 +320,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.PET_START_TRACKING, () => {
     const win = getMainWindow()
     if (win) startPetCursorTracking(win)
+    else logger.warn('PET_START_TRACKING: no main window')
   })
 
   ipcMain.handle(IPC.PET_STOP_TRACKING, () => {

@@ -20,6 +20,12 @@
 *~
 *.lnk
 electron.vite.config.*.mjs
+
+# Debug / repro scripts (local-only)
+/check-dpi.ps1
+/click-pet.ps1
+/move-mouse.ps1
+/move-to-dip.ps1
 .DS_Store
 .DS_Store?
 .Spotlight-V100

@@ -1,4 +1,5 @@
 import { getMainWindow } from './window'
+import { logger } from './logger'
 import { IPC } from '../shared/ipc-channels'
 import { getActiveProvider } from './agents/registry'
 import type { AgentMessage, ProviderInfo } from '../shared/agent-types'
@@ -44,6 +45,7 @@ export async function startTask(
   } catch (err) {
     // 用户主动停止(abort)不算错误,不污染 renderer 的 stopped 状态
     if (!controller.signal.aborted) {
+      logger.error(`[claude-service] startTask failed for taskId=${taskId}:`, err)
       send(taskId, { role: 'system', kind: 'error', meta: { error: String(err) } })
     }
   } finally {

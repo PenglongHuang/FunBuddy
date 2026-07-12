@@ -87,8 +87,9 @@ export const useAgentStore = create<AgentStore>()(
         }
         s._messages[taskId] = [...(s._messages[taskId] ?? []), { role: 'user', text: prompt }]
       })
-      ai.startTask(taskId, prompt, task.workspace, sessionId).catch(() => {
-        get().ingest(taskId, { role: 'system', kind: 'error', meta: { error: 'startTask failed' } })
+      ai.startTask(taskId, prompt, task.workspace, sessionId).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        get().ingest(taskId, { role: 'system', kind: 'error', meta: { error: `startTask failed: ${msg}` } })
       })
     },
 
@@ -123,7 +124,7 @@ export const useAgentStore = create<AgentStore>()(
           return
         }
 
-        // system.result / system.error:更新 status
+        // system.result / system.error:更新 status,并存入 _messages 以便 UI 渲染错误详情
         if (msg.role === 'system') {
           if (msg.kind === 'result') {
             t.status = msg.meta?.isError ? 'error' : 'idle'
@@ -131,6 +132,10 @@ export const useAgentStore = create<AgentStore>()(
           } else if (msg.kind === 'error') {
             t.status = 'error'
             t.updatedAt = Date.now()
+          }
+          // 仅把错误写入 _messages 供 UI 渲染;成功 result 不入库,避免逐轮堆积
+          if (msg.kind === 'error' || (msg.kind === 'result' && msg.meta?.isError)) {
+            s._messages[taskId] = [...(s._messages[taskId] ?? []), msg]
           }
           return
         }

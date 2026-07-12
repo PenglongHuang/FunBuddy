@@ -68,7 +68,7 @@ export function Button({ variant, icon, motionProps, children, className = '', .
 
   if (motionProps) {
     return (
-      <motion.button className={cls} style={style} {...motionProps} {...rest}>
+      <motion.button className={cls} style={style} {...motionProps} {...(rest as React.ComponentProps<typeof motion.button>)}>
         {icon}
         {children}
       </motion.button>

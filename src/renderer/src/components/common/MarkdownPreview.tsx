@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { marked } from 'marked'
+import { marked, type Tokens } from 'marked'
 import hljs from 'highlight.js/lib/core'
 import javascript from 'highlight.js/lib/languages/javascript'
 import typescript from 'highlight.js/lib/languages/typescript'
@@ -110,7 +110,7 @@ export default function MarkdownPreview({ content, mdFilePath, onLinkClick, link
 
     r.code = codeRenderer.code.bind(codeRenderer)
 
-    r.image = function ({ href, title, text }: { href: string; title?: string; text?: string }) {
+    r.image = function ({ href, title, text }: Tokens.Image) {
       const isLocalAsset = href?.includes('/assets/')
       if (isLocalAsset && imageMap[href]) {
         return `<img src="${imageMap[href]}" alt="${text || ''}" ${title ? `title="${title}"` : ''} style="max-width:100%;border-radius:var(--radius-sm)">`
