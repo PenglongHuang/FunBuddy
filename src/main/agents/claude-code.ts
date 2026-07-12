@@ -1,3 +1,6 @@
+import { logger } from '../logger'
+import path from 'node:path'
+import { app } from 'electron'
 import { spawn } from 'child_process'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { mapToAgentMessage } from '../claude-message-mapper'
@@ -5,6 +8,36 @@ import { TurnAssembler, type StreamEvent } from '../claude-stream-assembler'
 import type { AgentMessage, ProviderInfo } from '../../shared/agent-types'
 import type { CodingAgentProvider, ProviderStartOptions } from './types'
 import { NOTES_SYSTEM_PROMPT } from './notes-system-prompt'
+
+/**
+ * `${platform}-${arch}` -> SDK 原生二进制子包名。SDK 内部按此约定分发 claude CLI。
+ * 仅列出本应用当前打包的目标(electron-builder 只出 win-x64);新增平台时在此追加。
+ */
+const NATIVE_BIN_PACKAGE: Record<string, string> = {
+  'win32-x64': '@anthropic-ai/claude-agent-sdk-win32-x64',
+}
+
+/**
+ * 解析 claude CLI 可执行文件的真实路径,供 SDK 的 pathToClaudeCodeExecutable 使用。
+ *
+ * 打包后 SDK 会把二进制解析进 app.asar 虚拟路径(如 ...\app.asar\node_modules\...
+ * \claude.exe),Windows 无法从 asar 归档内 CreateProcess,SDK 便抛
+ * "exists but failed to launch"(原错误里 musl/libc 的提示只是通用 Linux 文案,
+ * 与 Windows 无关)。electron-builder 已把该原生二进制 unpack 到 app.asar.unpacked,
+ * 这里把路径段 app.asar 改写为 app.asar.unpacked 即可拿到真实文件。dev 下返回
+ * undefined,沿用 SDK 自带解析(node_modules 是真实文件,可正常 spawn)。
+ */
+function resolveClaudeExecutable(): string | undefined {
+  if (!app.isPackaged) return undefined
+  const pkg = NATIVE_BIN_PACKAGE[`${process.platform}-${process.arch}`]
+  if (!pkg) return undefined
+  const exeName = process.platform === 'win32' ? 'claude.exe' : 'claude'
+  const candidate = path.join(app.getAppPath(), 'node_modules', pkg, exeName)
+  const asarSeg = `${path.sep}app.asar${path.sep}`
+  return candidate.includes(asarSeg)
+    ? candidate.replace(asarSeg, `${path.sep}app.asar.unpacked${path.sep}`)
+    : candidate
+}
 
 /** partial 转发节流间隔:避免每个 token 都触发 IPC+重渲染 */
 const PARTIAL_THROTTLE_MS = 40
@@ -120,12 +153,7 @@ export const claudeCodeProvider: CodingAgentProvider = {
     const { taskId, prompt, workspace, sessionId } = opts
     const callId = ++callSeq
     const st: TurnState = { turnIndex: 0, assembler: null, lastFlushAt: 0 }
-
-    // [诊断] 确认 resume 是否真带上了 sessionId —— 排查"会话内追问丢历史"。
-    // 第二轮追问时这里应打印非空 sessionId;为空说明 store 没把 sessionId 透传过来。
-    console.log(
-      `[agent:claude-code] runTask taskId=${taskId} cwd=${workspace} resume=${sessionId ? sessionId : '(none — 首轮/新会话)'}`,
-    )
+    const claudeExe = resolveClaudeExecutable()
 
     const stream = query({
       prompt,
@@ -136,30 +164,35 @@ export const claudeCodeProvider: CodingAgentProvider = {
         includePartialMessages: true,
         abortController: controller,
         systemPrompt: { type: 'preset', preset: 'claude_code', append: NOTES_SYSTEM_PROMPT },
+        // 打包后必须显式指向 app.asar.unpacked 里的真实二进制,否则 SDK 会去 spawn
+        // app.asar 内的虚拟路径而启动失败(详见 resolveClaudeExecutable)。
+        ...(claudeExe ? { pathToClaudeCodeExecutable: claudeExe } : {}),
         ...(sessionId ? { resume: sessionId } : {}),
       },
     })
 
-    for await (const sdkMsg of stream) {
-      // [诊断] init 回传的 session_id:若本轮带了 resume,确认续接的是否同一个 session
-      if (sdkMsg.type === 'system' && (sdkMsg as { subtype?: string }).subtype === 'init') {
-        const sid = (sdkMsg as { session_id?: string }).session_id
-        console.log(
-          `[agent:claude-code] init session_id=${sid ?? '(missing)'}` +
-            (sessionId ? ` (传入 resume=${sessionId}, ${sessionId === sid ? '续接同一 session' : '⚠ 与传入不一致'})` : ''),
+    try {
+      for await (const sdkMsg of stream) {
+        if (sdkMsg.type === 'stream_event') {
+          handleStreamEvent(sdkMsg.event as unknown as StreamEvent, st, taskId, callId, onMessage)
+          continue
+        }
+        if (sdkMsg.type === 'assistant') {
+          finalizeTurn(sdkMsg, st, taskId, callId, onMessage)
+          continue
+        }
+        const mapped = mapToAgentMessage(sdkMsg)
+        if (mapped) onMessage(mapped)
+      }
+    } catch (err) {
+      // 用户主动停止(abort)不算错误:claude-service 也按 signal.aborted 抑制 renderer 通知。
+      if (!controller.signal.aborted) {
+        logger.error(
+          `[agent:claude-code] stream error for taskId=${taskId} workspace=${workspace}:`,
+          err,
         )
       }
-
-      if (sdkMsg.type === 'stream_event') {
-        handleStreamEvent(sdkMsg.event as unknown as StreamEvent, st, taskId, callId, onMessage)
-        continue
-      }
-      if (sdkMsg.type === 'assistant') {
-        finalizeTurn(sdkMsg, st, taskId, callId, onMessage)
-        continue
-      }
-      const mapped = mapToAgentMessage(sdkMsg)
-      if (mapped) onMessage(mapped)
+      throw err
     }
   },
 }

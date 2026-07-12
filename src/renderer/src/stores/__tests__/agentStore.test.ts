@@ -80,6 +80,31 @@ describe('agentStore', () => {
     expect(useAgentStore.getState().tasks[0].status).toBe('idle')
   })
 
+  it('ingest error 写入 _messages 以便 UI 渲染出错详情', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'error', meta: { error: 'something broke' } })
+    const msgs = useAgentStore.getState().getMessages(taskId)
+    expect(msgs).toHaveLength(1)
+    expect(msgs[0]).toMatchObject({ role: 'system', kind: 'error', meta: { error: 'something broke' } })
+    expect(useAgentStore.getState().tasks[0].status).toBe('error')
+  })
+
+  it('ingest result isError 写入 _messages 且 status=error', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'result', meta: { isError: true } })
+    const msgs = useAgentStore.getState().getMessages(taskId)
+    expect(msgs).toHaveLength(1)
+    expect(msgs[0]).toMatchObject({ role: 'system', kind: 'result', meta: { isError: true } })
+    expect(useAgentStore.getState().tasks[0].status).toBe('error')
+  })
+
+  it('ingest 成功 result 不写入 _messages(避免逐轮堆积)', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'result', meta: { isError: false } })
+    expect(useAgentStore.getState().getMessages(taskId)).toHaveLength(0)
+    expect(useAgentStore.getState().tasks[0].status).toBe('idle')
+  })
+
   it('markStopped 置 status stopped', () => {
     const taskId = useAgentStore.getState().createTask('t', '/ws')
     useAgentStore.getState().markStopped(taskId)

@@ -1,6 +1,7 @@
 import { BrowserWindow, screen, shell } from 'electron'
 import { join } from 'path'
 import { IPC } from '../shared/ipc-channels'
+import { logger } from './logger'
 
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
@@ -43,7 +44,9 @@ export function createMainWindow(): BrowserWindow {
     alwaysOnTop: true,
     resizable: false,
     skipTaskbar: true,
-    hasShadow: true,
+    // hasShadow removed — on Windows it conflicts with setIgnoreMouseEvents
+    // on transparent frameless windows, blocking mouse events from reaching
+    // the renderer in packaged builds (DWM shadow region intercepts events).
     backgroundColor: '#00000000',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -67,6 +70,13 @@ export function createMainWindow(): BrowserWindow {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    logger.error('render-process-gone', details)
+  })
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    logger.error('did-fail-load', { code, desc, url })
+  })
 
   mainWindow.on('close', (e) => {
     if (!isQuitting) {
@@ -205,36 +215,49 @@ let dragState: {
 const HIT_RADIUS_IDLE = 45
 const HIT_RADIUS_HOVERED = 95
 
+function checkCursorVsPet(win: BrowserWindow): boolean {
+  const cursor = screen.getCursorScreenPoint()
+  const bounds = win.getBounds()
+  const petCx = bounds.x + bounds.width / 2
+  const petCy = bounds.y + bounds.height / 2
+  const dx = cursor.x - petCx
+  const dy = cursor.y - petCy
+  const hitRadius = trackingHovering ? HIT_RADIUS_HOVERED : HIT_RADIUS_IDLE
+  return dx * dx + dy * dy <= hitRadius * hitRadius
+}
+
+function applyCursorTrackingState(win: BrowserWindow, inside: boolean): void {
+  if (inside && !trackingHovering) {
+    trackingHovering = true
+    win.setIgnoreMouseEvents(false)
+    win.webContents.send(IPC.PET_CURSOR_HOVER, { hovered: true })
+  } else if (!inside && trackingHovering && !trackingDragging) {
+    trackingHovering = false
+    win.setIgnoreMouseEvents(true, { forward: true })
+    win.webContents.send(IPC.PET_CURSOR_HOVER, { hovered: false })
+  }
+}
+
 export function startPetCursorTracking(win: BrowserWindow): void {
   stopPetCursorTracking()
-  win.setIgnoreMouseEvents(true, { forward: true })
-  trackingHovering = false
+  if (win.isDestroyed()) return
+
+  // Immediate first check — eliminates the 0-50ms blind window after
+  // tracking starts where the pet appears unresponsive to clicks.
+  const inside = checkCursorVsPet(win)
+  win.setIgnoreMouseEvents(!inside, { forward: true })
+  trackingHovering = inside
+  if (inside) {
+    win.webContents.send(IPC.PET_CURSOR_HOVER, { hovered: true })
+  }
 
   trackingInterval = setInterval(() => {
     if (win.isDestroyed()) {
+      logger.warn('tracking interval: window destroyed, stopping')
       stopPetCursorTracking()
       return
     }
-
-    const cursor = screen.getCursorScreenPoint()
-    const bounds = win.getBounds()
-
-    const petCx = bounds.x + bounds.width / 2
-    const petCy = bounds.y + bounds.height / 2
-    const dx = cursor.x - petCx
-    const dy = cursor.y - petCy
-    const hitRadius = trackingHovering ? HIT_RADIUS_HOVERED : HIT_RADIUS_IDLE
-    const inside = dx * dx + dy * dy <= hitRadius * hitRadius
-
-    if (inside && !trackingHovering) {
-      trackingHovering = true
-      win.setIgnoreMouseEvents(false)
-      win.webContents.send(IPC.PET_CURSOR_HOVER, { hovered: true })
-    } else if (!inside && trackingHovering && !trackingDragging) {
-      trackingHovering = false
-      win.setIgnoreMouseEvents(true, { forward: true })
-      win.webContents.send(IPC.PET_CURSOR_HOVER, { hovered: false })
-    }
+    applyCursorTrackingState(win, checkCursorVsPet(win))
   }, 50)
 }
 

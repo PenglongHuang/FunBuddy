@@ -196,7 +196,7 @@ export const useTimerStore = create<TimerStore>()(
           const newRound = saved.round + 1
           const nextPhase: TimerPhase = newRound % settings.roundsBeforeLongBreak === 0
             ? 'longBreak' : 'shortBreak'
-          const history = await store.get<{ completedAt: string; phase: 'focus'; durationMinutes: number }[]>('timerHistory') || []
+          const history = await store.get<TimerHistoryEntry[]>('timerHistory') || []
           history.push({ id: crypto.randomUUID(), completedAt: new Date().toISOString(), phase: 'focus', durationMinutes: settings.focusDuration })
           await store.set('timerHistory', history)
           await store.set('timer', { status: 'idle', phase: nextPhase, remainingMs: 0, totalMs: 0, timestamp: '', round: newRound })

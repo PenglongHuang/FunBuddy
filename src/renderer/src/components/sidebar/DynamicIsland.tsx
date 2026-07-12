@@ -21,7 +21,7 @@ export default function DynamicIsland() {
   const navPush = useNavigationStore((s) => s.push)
   const [isExpanded, setIsExpanded] = useState(false)
   const [currentTime, setCurrentTime] = useState('')
-  const expandTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const expandTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   // Update clock
   useEffect(() => {

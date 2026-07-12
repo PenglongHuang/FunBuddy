@@ -1,4 +1,4 @@
-import { marked } from 'marked'
+import { marked, type MarkedExtension, type Tokens } from 'marked'
 import hljs from 'highlight.js/lib/core'
 import javascript from 'highlight.js/lib/languages/javascript'
 import typescript from 'highlight.js/lib/languages/typescript'
@@ -76,7 +76,7 @@ hr { border: none; border-top: 1px solid #e5e7eb; margin: 16px 0; }
 .markdown-body th { background: #f6f8fa; font-weight: 600; }
 `
 
-function buildCodeRenderer(): marked.MarkedExtension {
+function buildCodeRenderer(): MarkedExtension {
   const renderer = new marked.Renderer()
   renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
     if (lang && hljs.getLanguage(lang)) {
@@ -110,9 +110,9 @@ async function resolveImages(content: string, mdFilePath: string): Promise<Recor
   return imageMap
 }
 
-function buildImageRenderer(imageMap: Record<string, string>): marked.MarkedExtension {
+function buildImageRenderer(imageMap: Record<string, string>): MarkedExtension {
   const renderer = new marked.Renderer()
-  renderer.image = function ({ href, title, text }: { href: string; title?: string; text?: string }) {
+  renderer.image = function ({ href, title, text }: Tokens.Image) {
     if (href && imageMap[href]) {
       return `<img src="${imageMap[href]}" alt="${escapeAttr(text || '')}" ${title ? `title="${escapeAttr(title)}"` : ''} style="max-width:100%;height:auto" />`
     }

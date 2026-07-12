@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "target": "es2022",
     "strict": true,
     "skipLibCheck": true,
     "composite": true,

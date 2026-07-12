@@ -17,6 +17,10 @@ export interface FunBuddyAPI {
   windowGetDisplay: () => Promise<{ width: number; height: number }>
   windowGetBounds: () => Promise<{ x: number; y: number; width: number; height: number }>
   windowSetBounds: (bounds: { x: number; y: number; width: number; height: number }) => Promise<void>
+  windowSetIgnoreMouseEvents: (ignore: boolean) => Promise<void>
+  windowExpandPanel: (petX?: number, petY?: number) => Promise<{ x: number; y: number }>
+  windowCollapsePet: (petX?: number, petY?: number) => Promise<{ width: number; height: number } | null>
+  windowToggleAlwaysOnTop: () => Promise<boolean>
   notificationShow: (title: string, body: string) => Promise<void>
   dialogOpenDirectory: () => Promise<string | null>
   dialogShowSaveDialog: (options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>
@@ -65,6 +69,9 @@ export interface FunBuddyAPI {
   imageCleanup: (mdFilePath: string) => Promise<void>
   imageReadAsDataUrl: (mdFilePath: string, imageFileName: string, maxWidth?: number) => Promise<{ dataUrl: string; mimeType: string }>
   imageMoveAssets: (oldMdFilePath: string, newMdFilePath: string) => Promise<void>
+
+  // PDF
+  exportPdf: (html: string, fileName: string, defaultPath?: string) => Promise<{ success: true; filePath: string } | { success: true } | { success: false; error: string }>
 }
 
 declare global {

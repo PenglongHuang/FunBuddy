@@ -113,7 +113,7 @@ export default function NoteList() {
 
           {/* Per-tag tabs */}
           {allTags.map((tag) => {
-            const color = getTagColor(tag)
+            const color = getTagColor()
             const isActive = activeTag === tag
             const isRenaming = renamingTag === tag
 

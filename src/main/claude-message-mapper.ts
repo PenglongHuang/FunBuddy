@@ -33,6 +33,7 @@ export function mapToAgentMessage(msg: SDKMessage): AgentMessage | null {
       meta: {
         isError: (msg as any).is_error,
         subtype: (msg as any).subtype,
+        result: (msg as any).result,
         costUsd: (msg as any).total_cost_usd,
         numTurns: (msg as any).num_turns,
       },

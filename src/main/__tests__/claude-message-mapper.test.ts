@@ -50,13 +50,36 @@ describe('mapToAgentMessage', () => {
       type: 'result',
       subtype: 'success',
       is_error: false,
+      result: 'done',
       total_cost_usd: 0.0123,
       num_turns: 3,
     } as any
     expect(mapToAgentMessage(msg)).toEqual({
       role: 'system',
       kind: 'result',
-      meta: { isError: false, subtype: 'success', costUsd: 0.0123, numTurns: 3 },
+      meta: { isError: false, subtype: 'success', result: 'done', costUsd: 0.0123, numTurns: 3 },
+    })
+  })
+
+  it('maps error result and forwards the reason text in meta.result', () => {
+    const msg = {
+      type: 'result',
+      subtype: 'error_during_execution',
+      is_error: true,
+      result: 'tool failed: permission denied',
+      total_cost_usd: 0.0001,
+      num_turns: 1,
+    } as any
+    expect(mapToAgentMessage(msg)).toEqual({
+      role: 'system',
+      kind: 'result',
+      meta: {
+        isError: true,
+        subtype: 'error_during_execution',
+        result: 'tool failed: permission denied',
+        costUsd: 0.0001,
+        numTurns: 1,
+      },
     })
   })
 

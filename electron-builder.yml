@@ -7,6 +7,12 @@ files:
   - out/**/*
   - resources/**/*
   - node_modules/sharp/**/*
+# claude-agent-sdk 的原生 CLI(claude.exe 等)是平台子包,必须 unpack 出 asar
+# 归档,否则 Windows 无法从 app.asar 内 CreateProcess 运行 claude-code.ts 的
+# resolveClaudeExecutable 改写出的 app.asar.unpacked 路径就指向真实文件。
+# `claude-agent-sdk-*` 只匹配平台子包(win32-x64/darwin-arm64/...),不含主包。
+asarUnpack:
+  - node_modules/@anthropic-ai/claude-agent-sdk-*/**
 forceCodeSigning: false
 win:
   target:

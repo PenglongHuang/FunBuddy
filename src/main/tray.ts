@@ -3,6 +3,8 @@ import { join } from 'path'
 import { readFileSync } from 'fs'
 import { IPC } from '../shared/ipc-channels'
 
+import { logger } from './logger'
+
 let tray: Tray | null = null
 
 function pointInPolygon(px: number, py: number, polygon: [number, number][]): boolean {
@@ -84,7 +86,7 @@ function loadIcon(): Electron.NativeImage {
   }
 
   // Fallback: programmatic icon
-  console.warn('Using fallback tray icon')
+  logger.warn('Using fallback tray icon')
   return createFallbackIcon().resize({ width: 32, height: 32 })
 }
 
