@@ -54,6 +54,12 @@ Both notes and plans support multi-tab browsing. Drag to reorder, pin frequently
 
 Built-in AI search overlay with quick suggestions: summarize plans, find notes, create a plan, start a focus session. The interaction entry point is ready for future AI features.
 
+### AI Coding Agent
+
+A built-in Coding Agent panel that drives Claude Code right from your pet. Give tasks in natural language, watch answers stream in, and see every tool call visualized — Read / Write / Edit / Bash / Glob / Grep / WebSearch and more show up as expandable cards. Multi-session management (review history, delete), workspace directory picker, and stop generation at any time. Your notes and plans are automatically injected as context so the agent understands your project.
+
+> **Prerequisite:** Requires the [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) CLI to be installed locally. If it isn't detected, the panel shows install instructions.
+
 ### System Integration
 
 - System tray — minimizes to tray instead of closing
@@ -69,7 +75,6 @@ Built-in AI search overlay with quick suggestions: summarize plans, find notes, 
 > The pet isn't just a companion — it's becoming your AI work hub.
 
 - **AI Assistant** — Manage plans and notes with natural language, smart search and summarization
-- **Coding Agent Control Hub** — Orchestrate Claude Code, OpenAI Codex from the panel with visual multi-agent task tracking
 - **AI Knowledge Base & Memory** — Give the pet long-term memory so you can find anything you've ever written using plain language
 - **Browser & Desktop Automation** — Describe tasks in natural language, the pet operates browsers and apps for you
 - **IM Integration** — Connect WeChat, Feishu, Slack with AI summaries and smart reply suggestions
@@ -89,13 +94,15 @@ Built-in AI search overlay with quick suggestions: summarize plans, find notes, 
 | [electron-vite](https://electron-vite.org/) | Build & HMR |
 | [electron-store](https://github.com/sindresorhus/electron-store) | Persistent config storage |
 | [Lucide React](https://lucide.dev/) | Icon library |
+| [@anthropic-ai/claude-agent-sdk](https://github.com/anthropics/claude-agent-sdk-typescript) | Coding Agent / Claude Code integration |
+| [Vitest](https://vitest.dev/) | Unit testing |
 
 ---
 
 ## Project Structure
 
 ```
-fun-buddy/
+FunBuddy/
 ├── src/
 │   ├── main/                  # Electron main process
 │   │   ├── index.ts           # App entry point
@@ -103,7 +110,10 @@ fun-buddy/
 │   │   ├── tray.ts            # System tray
 │   │   ├── hotkey.ts          # Global hotkeys
 │   │   ├── ipc-handlers.ts    # IPC communication
-│   │   └── store.ts           # Main process persistence
+│   │   ├── store.ts           # Main process persistence
+│   │   ├── claude-service.ts  # Coding Agent task orchestration
+│   │   ├── agents/            # Claude Code provider, sessions, registry
+│   │   └── logger.ts          # Logging
 │   ├── preload/               # Preload scripts
 │   ├── renderer/              # Renderer process (React)
 │   │   ├── components/
@@ -111,6 +121,7 @@ fun-buddy/
 │   │   │   ├── timer/         # Pomodoro timer
 │   │   │   ├── planner/       # Plan management
 │   │   │   ├── notes/         # Markdown notes
+│   │   │   ├── agent/         # Coding Agent panel
 │   │   │   ├── settings/      # Settings panel
 │   │   │   ├── sidebar/       # Sidebar, navigation, AI search
 │   │   │   ├── common/        # Shared components (TabBar, Toast, Markdown, etc.)
@@ -121,7 +132,8 @@ fun-buddy/
 │   │   └── utils/             # General utilities
 │   └── shared/                # Shared between main/renderer
 │       ├── ipc-channels.ts    # IPC channel definitions
-│       └── store-schema.ts    # Data schema
+│       ├── store-schema.ts    # Data schema
+│       └── agent-types.ts     # Agent type definitions
 ├── resources/                 # App icons
 ├── electron-builder.yml       # Packaging config
 └── electron.vite.config.ts    # Vite build config
@@ -132,13 +144,24 @@ fun-buddy/
 ## Getting Started
 
 ```bash
-git clone https://github.com/PenglongHuang/fun-buddy.git
-cd fun-buddy
+git clone https://github.com/PenglongHuang/FunBuddy.git
+cd FunBuddy
 npm install
 npm run dev
 ```
 
 Requires Node.js >= 18. Windows 10/11 only for now.
+
+### Common Scripts
+
+| Command | Purpose |
+|----------|---------|
+| `npm run dev` | Start dev environment (HMR) |
+| `npm run build` | Build production artifacts |
+| `npm run preview` | Preview the build |
+| `npm test` | Run unit tests |
+| `npm run typecheck` | TypeScript type checking |
+| `npm run build:win` | Package the Windows installer |
 
 ### Build for Distribution
 
