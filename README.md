@@ -54,6 +54,12 @@
 
 面板内置 AI 搜索浮层，提供快捷建议：总结计划、查找笔记、新建计划、开始专注。为未来的 AI 功能预留交互入口。
 
+### AI 编程助手（Coding Agent）
+
+面板内置 Coding Agent 面板，直接在萌宠里调度 Claude Code。用自然语言下达任务，流式输出回答，并把每一步工具调用可视化 —— Read / Write / Edit / Bash / Glob / Grep / WebSearch 等操作以可展开的卡片呈现。支持多会话管理（历史回看、删除）、选择工作区目录、生成过程中随时中断。会自动把你的笔记和计划注入上下文，让 Agent 更懂你的项目。
+
+> **前置条件：** 需在本地安装 [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) CLI。若未检测到，面板内会显示安装指引。
+
 ### 系统集成
 
 - 系统托盘常驻，最小化到托盘而不关闭
@@ -69,7 +75,6 @@
 > 萌宠不只是陪伴 — 它正在成为你的 AI 办公中枢。
 
 - **AI 助手** — 用自然语言管理计划和笔记，智能搜索和总结
-- **Coding Agent 控制中枢** — 在面板里调度 Claude Code、OpenAI Codex，可视化追踪多 Agent 任务
 - **AI 知识库与记忆** — 让萌宠拥有长期记忆，用自然语言搜到你写过的任何东西
 - **浏览器与桌面自动化** — 用自然语言描述任务，萌宠自动操作浏览器和桌面应用
 - **即时通讯集成** — 接入微信、飞书、Slack，AI 摘要 + 智能回复建议
@@ -89,13 +94,15 @@
 | [electron-vite](https://electron-vite.org/) | 构建与热更新 |
 | [electron-store](https://github.com/sindresorhus/electron-store) | 持久化配置存储 |
 | [Lucide React](https://lucide.dev/) | 图标库 |
+| [@anthropic-ai/claude-agent-sdk](https://github.com/anthropics/claude-agent-sdk-typescript) | Coding Agent / Claude Code 集成 |
+| [Vitest](https://vitest.dev/) | 单元测试 |
 
 ---
 
 ## 项目结构
 
 ```
-fun-buddy/
+FunBuddy/
 ├── src/
 │   ├── main/                  # Electron 主进程
 │   │   ├── index.ts           # 应用入口
@@ -103,7 +110,10 @@ fun-buddy/
 │   │   ├── tray.ts            # 系统托盘
 │   │   ├── hotkey.ts          # 全局快捷键
 │   │   ├── ipc-handlers.ts    # IPC 通信
-│   │   └── store.ts           # 主进程持久化
+│   │   ├── store.ts           # 主进程持久化
+│   │   ├── claude-service.ts  # Coding Agent 任务编排
+│   │   ├── agents/            # Claude Code provider、会话、注册表
+│   │   └── logger.ts          # 日志
 │   ├── preload/               # 预加载脚本
 │   ├── renderer/              # 渲染进程 (React)
 │   │   ├── components/
@@ -111,6 +121,7 @@ fun-buddy/
 │   │   │   ├── timer/         # 番茄钟
 │   │   │   ├── planner/       # 计划管理
 │   │   │   ├── notes/         # Markdown 笔记
+│   │   │   ├── agent/         # Coding Agent 面板
 │   │   │   ├── settings/      # 设置面板
 │   │   │   ├── sidebar/       # 侧边栏、导航、AI 搜索
 │   │   │   ├── common/        # 通用组件 (TabBar、Toast、Markdown 等)
@@ -121,7 +132,8 @@ fun-buddy/
 │   │   └── utils/             # 通用工具函数
 │   └── shared/                # 主进程/渲染进程共享
 │       ├── ipc-channels.ts    # IPC 频道定义
-│       └── store-schema.ts    # 数据 schema
+│       ├── store-schema.ts    # 数据 schema
+│       └── agent-types.ts     # Agent 类型定义
 ├── resources/                 # 应用图标
 ├── electron-builder.yml       # 打包配置
 └── electron.vite.config.ts    # Vite 构建配置
@@ -132,13 +144,24 @@ fun-buddy/
 ## 快速开始
 
 ```bash
-git clone https://github.com/PenglongHuang/fun-buddy.git
-cd fun-buddy
+git clone https://github.com/PenglongHuang/FunBuddy.git
+cd FunBuddy
 npm install
 npm run dev
 ```
 
 需要 Node.js >= 18，当前仅支持 Windows 10/11。
+
+### 常用脚本
+
+| 命令 | 作用 |
+|------|------|
+| `npm run dev` | 启动开发环境（热更新） |
+| `npm run build` | 构建生产产物 |
+| `npm run preview` | 预览构建产物 |
+| `npm test` | 运行单元测试 |
+| `npm run typecheck` | TypeScript 类型检查 |
+| `npm run build:win` | 打包 Windows 安装包 |
 
 ### 打包发布
 
