@@ -448,6 +448,13 @@ html, body, #root {
 .markdown-body pre code .hljs-symbol { color: #BD93F9; }
 .markdown-body pre code .hljs-meta { color: #F8F8F2; }
 
+.code-block { border-radius: var(--radius-sm); overflow: hidden; margin: 0.6em 0; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); }
+.code-block__bar { display: flex; justify-content: space-between; align-items: center; padding: 4px 10px; background: rgba(255,255,255,0.04); font-size: 11px; }
+.code-block__lang { color: rgba(255,255,255,0.45); text-transform: lowercase; }
+.code-block__copy { background: transparent; border: none; color: rgba(255,255,255,0.6); cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 4px; }
+.code-block__copy:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); }
+.code-block pre { margin: 0; border: none; background: transparent; }
+
 /* === Hover Utility Classes === */
 .hover-blue-bg:hover { background: rgba(10,132,255,0.10); }
 .hover-tertiary-bg:hover { background: var(--bg-tertiary); }

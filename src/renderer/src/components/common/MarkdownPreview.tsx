@@ -12,6 +12,7 @@ import markdown from 'highlight.js/lib/languages/markdown'
 import { imageApi } from '@/lib/ipc'
 import { parseLinks, replaceLinksWithHtml, maskCodeBlocks, escapeRawAngles } from '@/lib/link-parser'
 import { resolveLinks } from '@/lib/link-resolver'
+import { renderCodeBlock } from '@/lib/code-block'
 
 hljs.registerLanguage('javascript', javascript)
 hljs.registerLanguage('js', javascript)
@@ -34,7 +35,7 @@ codeRenderer.code = function ({ text, lang }: { text: string; lang?: string }) {
   const highlighted = language
     ? hljs.highlight(text, { language }).value
     : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  return `<pre><code class="hljs language-${lang || 'plaintext'}">${highlighted}</code></pre>`
+  return renderCodeBlock(lang, text, highlighted)
 }
 
 interface MarkdownPreviewProps {
@@ -145,6 +146,23 @@ export default function MarkdownPreview({ content, mdFilePath, onLinkClick, link
   }, [processedContent, renderer])
 
   const handleClick = useCallback((e: React.MouseEvent) => {
+    const copyBtn = (e.target as HTMLElement).closest('.code-block__copy') as HTMLButtonElement | null
+    if (copyBtn) {
+      const code = copyBtn.dataset.code ?? ''
+      const seq = String((Number(copyBtn.dataset.seq ?? 0) + 1))
+      copyBtn.dataset.seq = seq
+      navigator.clipboard?.writeText(code)
+        .then(() => {
+          if (copyBtn.dataset.seq !== seq) return
+          copyBtn.textContent = '已复制 ✓'
+          setTimeout(() => {
+            if (copyBtn.dataset.seq !== seq) return
+            copyBtn.textContent = '复制'
+          }, 1200)
+        })
+        .catch(() => { /* 权限拒绝/非安全上下文:静默无反馈 */ })
+      return
+    }
     const target = (e.target as HTMLElement).closest('.wikilink') as HTMLElement | null
     if (!target) return
     const id = target.dataset.linkId
