@@ -1,5 +1,6 @@
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentMessage, ToolUse } from '../shared/agent-types'
+import { flattenToolResultContent } from '../shared/tool-result-util'
 
 /**
  * 把 SDK 的 SDKMessage 映射成 renderer 用的 AgentMessage。
@@ -62,12 +63,4 @@ export function extractToolResults(msg: SDKMessage): { toolUseId: string; conten
     out.push({ toolUseId: b.tool_use_id, content: flattenToolResultContent(b.content), isError: !!b.is_error })
   }
   return out
-}
-
-function flattenToolResultContent(c: unknown): string {
-  if (typeof c === 'string') return c
-  if (Array.isArray(c)) {
-    return c.map((x: any) => (x && typeof x.text === 'string' ? x.text : '')).join('')
-  }
-  return c == null ? '' : String(c)
 }

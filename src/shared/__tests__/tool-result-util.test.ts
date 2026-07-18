@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { locateToolUse, summarizeToolResultSize } from '../tool-result-util'
+import { locateToolUse, summarizeToolResultSize, flattenToolResultContent } from '../tool-result-util'
 import type { AgentMessage } from '../agent-types'
 
 describe('locateToolUse', () => {
@@ -37,5 +37,21 @@ describe('summarizeToolResultSize', () => {
   })
   it('CJK 字符按 code unit 计数(非 UTF-8 字节)', () => {
     expect(summarizeToolResultSize('你好')).toEqual({ chars: 2, lines: 1 })
+  })
+})
+
+describe('flattenToolResultContent', () => {
+  it('字符串原样返回', () => {
+    expect(flattenToolResultContent('hi')).toBe('hi')
+  })
+  it('文本块数组拼接 text', () => {
+    expect(flattenToolResultContent([{ text: 'a' }, { text: 'b' }])).toBe('ab')
+  })
+  it('数组里无 text 的元素丢弃', () => {
+    expect(flattenToolResultContent([{ text: 'a' }, { type: 'image' }, { text: 'c' }])).toBe('ac')
+  })
+  it('null/undefined → 空串', () => {
+    expect(flattenToolResultContent(null)).toBe('')
+    expect(flattenToolResultContent(undefined)).toBe('')
   })
 })

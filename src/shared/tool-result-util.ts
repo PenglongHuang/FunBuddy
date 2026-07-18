@@ -26,3 +26,10 @@ export function summarizeToolResultSize(content: string): { chars: number; lines
   const lines = content === '' ? 0 : content.split(/\r?\n/).length
   return { chars: content.length, lines }
 }
+
+/** 把 tool_result 的 content(string | 文本块数组 | 其他)归一成字符串。图片等非文本块按 MVP 丢弃为空。 */
+export function flattenToolResultContent(c: unknown): string {
+  if (typeof c === 'string') return c
+  if (Array.isArray(c)) return c.map((x: any) => (x && typeof x.text === 'string' ? x.text : '')).join('')
+  return c == null ? '' : String(c)
+}

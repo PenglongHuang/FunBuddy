@@ -6,7 +6,7 @@ import {
   type SDKSessionInfo,
 } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentMessage } from '../../shared/agent-types'
-import { sessionMessageToAgentMessage } from './session-message-mapper'
+import { mapSessionTranscript } from './session-message-mapper'
 
 /**
  * 查询 CLI 会话真相源(~/.claude/projects/<encoded-cwd>/<sid>.jsonl)的封装层。
@@ -31,12 +31,7 @@ export async function getAgentSessionMessages(
   opts: { dir: string },
 ): Promise<AgentMessage[]> {
   const raw = await getSessionMessages(sessionId, { dir: opts.dir })
-  const mapped: AgentMessage[] = []
-  for (const entry of raw) {
-    const m = sessionMessageToAgentMessage(entry as Parameters<typeof sessionMessageToAgentMessage>[0])
-    if (m) mapped.push(m)
-  }
-  return mapped
+  return mapSessionTranscript(raw as Parameters<typeof mapSessionTranscript>[0])
 }
 
 /** 探测 sessionId 是否仍在 CLI 真相源中(未过期/未被清)。迁移用。 */

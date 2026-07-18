@@ -1,4 +1,5 @@
 import type { AgentMessage, ToolUse } from '../../shared/agent-types'
+import { locateToolUse, summarizeToolResultSize, flattenToolResultContent } from '../../shared/tool-result-util'
 
 /**
  * 把 SDK getSessionMessages() 返回的单条 raw transcript entry 映射成 renderer 的 AgentMessage。
@@ -7,7 +8,16 @@ import type { AgentMessage, ToolUse } from '../../shared/agent-types'
  *
  * 纯函数,不依赖 electron,可单测。
  */
-type RawBlock = { type: string; text?: string; name?: string; input?: unknown }
+type RawBlock = {
+  type: string
+  text?: string
+  name?: string
+  id?: string
+  input?: unknown
+  tool_use_id?: string
+  content?: unknown
+  is_error?: boolean
+}
 
 /**
  * 把 transcript 里的 content 归一成块数组。
@@ -45,10 +55,39 @@ export function sessionMessageToAgentMessage(raw: {
     const toolUses: ToolUse[] = []
     for (const b of blocks) {
       if (b.type === 'text' && typeof b.text === 'string') text += b.text
-      else if (b.type === 'tool_use' && b.name) toolUses.push({ name: b.name, input: b.input })
+      else if (b.type === 'tool_use' && b.name) toolUses.push({ name: b.name, id: b.id, input: b.input })
     }
     return { role: 'assistant', text, toolUses }
   }
 
   return null
+}
+
+/**
+ * 批量映射 transcript:逐条映射成 AgentMessage,并把 user 消息里的 tool_result
+ * 按 tool_use_id 关联到对应 assistant.toolUses[i].result。供 sessions.ts 调用。
+ * 纯函数,不依赖 electron。
+ */
+export function mapSessionTranscript(raws: Parameters<typeof sessionMessageToAgentMessage>[0][]): AgentMessage[] {
+  const messages: AgentMessage[] = []
+  for (const raw of raws) {
+    const m = sessionMessageToAgentMessage(raw)
+    if (m) messages.push(m)
+
+    // user 消息可能映射为 null(纯 tool_result,text 空),但这里仍要提取 tool_result 关联
+    if (raw.type === 'user') {
+      for (const b of toBlocks(raw.message?.content)) {
+        if (b.type !== 'tool_result' || !b.tool_use_id) continue
+        const loc = locateToolUse(messages, b.tool_use_id)
+        if (!loc) continue
+        const content = flattenToolResultContent(b.content)
+        const { chars, lines } = summarizeToolResultSize(content)
+        const owner = messages[loc.msgIdx]
+        if (owner.role === 'assistant') {
+          owner.toolUses[loc.toolIdx].result = { content, isError: !!b.is_error, chars, lines }
+        }
+      }
+    }
+  }
+  return messages
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sessionMessageToAgentMessage } from '../session-message-mapper'
+import { sessionMessageToAgentMessage, mapSessionTranscript } from '../session-message-mapper'
 
 describe('sessionMessageToAgentMessage', () => {
   it('把 assistant 消息映射成 AgentMessage.assistant(含 text 和 toolUses)', () => {
@@ -22,7 +22,7 @@ describe('sessionMessageToAgentMessage', () => {
     expect(result).toEqual({
       role: 'assistant',
       text: '你好',
-      toolUses: [{ name: 'Read', input: { file_path: '/a.ts' } }],
+      toolUses: [{ name: 'Read', id: 'tu_1', input: { file_path: '/a.ts' } }],
     })
   })
 
@@ -103,5 +103,67 @@ describe('sessionMessageToAgentMessage', () => {
 
   it('无法识别的 entry 类型返回 null', () => {
     expect(sessionMessageToAgentMessage({ type: 'unknown' } as any)).toBeNull()
+  })
+})
+
+describe('mapSessionTranscript', () => {
+  it('把 user 消息里的 tool_result 关联到对应 assistant.toolUses[i].result', () => {
+    const raws = [
+      { type: 'user', message: { role: 'user', content: '读一下 a.ts' } },
+      {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: '我来读' },
+            { type: 'tool_use', id: 'tu-1', name: 'Read', input: { file_path: 'a.ts' } },
+          ],
+        },
+      },
+      {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'tu-1', content: 'line1\nline2', is_error: false }],
+        },
+      },
+    ]
+    const out = mapSessionTranscript(raws as any)
+    expect(out).toHaveLength(2) // user(text) + assistant;纯 tool_result 的 user 不画气泡
+    const assistant = out[1]
+    if (assistant.role !== 'assistant') throw new Error('expected assistant')
+    expect(assistant.toolUses[0].id).toBe('tu-1')
+    expect(assistant.toolUses[0].result).toEqual({
+      content: 'line1\nline2', isError: false, chars: 11, lines: 2,
+    })
+  })
+
+  it('tool_result 找不到归属(tool_use_id 无匹配)时安全忽略', () => {
+    const raws = [
+      { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'nope', content: 'x' }] } },
+    ]
+    const out = mapSessionTranscript(raws as any)
+    expect(out).toHaveLength(0)
+  })
+
+  it('assistant tool_use 带的 id 透传(供关联)', () => {
+    const raws = [
+      { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu-7', name: 'Bash', input: { command: 'ls' } }] } },
+    ]
+    const out = mapSessionTranscript(raws as any)
+    const a = out[0]
+    if (a.role !== 'assistant') throw new Error('expected assistant')
+    expect(a.toolUses[0].id).toBe('tu-7')
+  })
+
+  it('失败的工具结果(is_error)关联为 isError:true', () => {
+    const raws = [
+      { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu-e', name: 'Bash', input: { command: 'bad' } }] } },
+      { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu-e', content: 'command not found', is_error: true }] } },
+    ]
+    const out = mapSessionTranscript(raws as any)
+    const a = out[0]
+    if (a.role !== 'assistant') throw new Error('expected assistant')
+    expect(a.toolUses[0].result?.isError).toBe(true)
   })
 })
