@@ -5,9 +5,9 @@ import MarkdownPreview from '@/components/common/MarkdownPreview'
 import { useAgentStore } from '@/stores/agentStore'
 import { useToastStore } from '@/stores/toastStore'
 import { aiEvents, ai, dialog, fs } from '@/lib/ipc'
-import { summarizeToolInput } from '@/lib/tool-input-summary'
+import { summarizeToolInput, summarizeToolResult } from '@/lib/tool-input-summary'
 import { normalizeErrorMessage } from '@/lib/normalize-error'
-import type { AgentMessage, AgentTask, AgentTaskStatus, ProviderInfo } from '../../../../shared/agent-types'
+import type { AgentMessage, AgentTask, AgentTaskStatus, ProviderInfo, ToolUse } from '../../../../shared/agent-types'
 
 const TOOL_ICON: Record<string, string> = {
   Read: '📖', Write: '📝', Edit: '✏️', Bash: '💻', Glob: '🔍', Grep: '🔎',
@@ -21,12 +21,14 @@ const STATUS_META: Record<AgentTaskStatus, { dot: string; label: string; color: 
   stopped: { dot: '○', label: '已停止', color: 'rgba(255,255,255,0.4)' },
 }
 
+const PRE_STYLE = { margin: 0, fontSize: 10.5, lineHeight: 1.4, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: '6px 8px', color: 'rgba(255,255,255,0.65)', whiteSpace: 'pre-wrap' } as const
+
 const INPUT_LINE_HEIGHT = 22
 const INPUT_MAX_LINES = 6
 const INPUT_PAD_Y = 18
 const INPUT_MAX_HEIGHT = INPUT_MAX_LINES * INPUT_LINE_HEIGHT + INPUT_PAD_Y
 
-function ToolPills({ toolUses }: { toolUses: { name: string; input?: unknown }[] }) {
+function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
   const [expanded, setExpanded] = useState<number | null>(null)
   if (toolUses.length === 0) return null
   return (
@@ -36,33 +38,47 @@ function ToolPills({ toolUses }: { toolUses: { name: string; input?: unknown }[]
         const isEdit = t.name === 'Edit' || t.name === 'Write'
         const isOpen = expanded === i
         const hasInput = t.input != null
+        const result = t.result
+        const canExpand = hasInput || !!result
+        const resultLine = result ? summarizeToolResult(result) : ''
+        const resultColor = result?.isError ? '#FF453a' : '#30D158'
         return (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, maxWidth: '100%' }}>
             <span
-              onClick={hasInput ? () => setExpanded(isOpen ? null : i) : undefined}
+              onClick={canExpand ? () => setExpanded(isOpen ? null : i) : undefined}
               style={{
                 fontSize: 11, padding: '3px 9px', borderRadius: 11,
-                cursor: hasInput ? 'pointer' : 'default',
+                cursor: canExpand ? 'pointer' : 'default',
                 display: 'inline-flex', alignItems: 'center', gap: 5,
                 background: isEdit ? 'rgba(255,159,10,0.1)' : 'rgba(255,255,255,0.06)',
                 border: `1px solid ${isEdit ? 'rgba(255,159,10,0.3)' : 'rgba(255,255,255,0.1)'}`,
                 color: isEdit ? '#FF9F0A' : 'rgba(255,255,255,0.7)',
-                maxWidth: '100%',
               }}
             >
               <span>{TOOL_ICON[t.name] ?? '🔧'} {t.name}{summary ? ` · ${summary}` : ''}</span>
-              {hasInput && (
+              {resultLine && <span style={{ color: resultColor }}>{resultLine}</span>}
+              {canExpand && (
                 <ChevronRight size={11} style={{ flexShrink: 0, opacity: 0.55, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s ease' }} />
               )}
             </span>
-            {isOpen && t.input != null && (
-              <pre style={{
-                margin: 0, maxWidth: '100%', overflowX: 'auto', fontSize: 10.5, lineHeight: 1.4,
-                background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 8, padding: '6px 8px', color: 'rgba(255,255,255,0.65)', whiteSpace: 'pre-wrap',
-              }}>
-                {JSON.stringify(t.input, null, 2)}
-              </pre>
+            {isOpen && canExpand && (
+              <div style={{ width: '100%', maxWidth: 460, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {hasInput && (
+                  <div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>输入</div>
+                    <pre style={PRE_STYLE}>{JSON.stringify(t.input, null, 2)}</pre>
+                  </div>
+                )}
+                {result && (
+                  <div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 2, display: 'flex', justifyContent: 'space-between' }}>
+                      <span>输出 <span style={{ color: resultColor }}>{result.isError ? '✗' : '✓'}</span></span>
+                      <span style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.6)' }} onClick={() => { navigator.clipboard?.writeText(result.content); useToastStore.getState().show('已复制输出') }}>复制</span>
+                    </div>
+                    <pre style={{ ...PRE_STYLE, maxHeight: 240, overflowY: 'auto' }}>{result.content || '(空)'}</pre>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )

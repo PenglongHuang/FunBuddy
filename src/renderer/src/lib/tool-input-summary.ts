@@ -1,3 +1,5 @@
+import type { ToolResult } from '../../../shared/agent-types'
+
 /**
  * 从工具入参里取一句最显眼的摘要(文件名/命令/模式等),用于胶囊显示。
  * 找不到则返回空串(胶囊退化为仅显示工具名)。
@@ -53,4 +55,21 @@ function firstLine(s: string): string {
 function clip(s: string, max = 60): string {
   const t = s.trim()
   return t.length > max ? t.slice(0, max) + '…' : t
+}
+
+/** 生成 tool_result 的一行摘要,贴在 ToolPill 文案后。chars 是字符数(非字节)。 */
+export function summarizeToolResult(r: ToolResult): string {
+  if (r.isError) {
+    const first = (r.content.split(/\r?\n/)[0] ?? '').trim()
+    return '✗ ' + clip(first || '执行失败', 40)
+  }
+  if (!r.content || r.chars === 0) return '✓ 空'
+  return `✓ ${formatChars(r.chars)} 字 · ${r.lines} 行`
+}
+
+/** 字符数量级简写(非字节):<1000 原样,否则 K/M。 */
+function formatChars(n: number): string {
+  if (n < 1000) return `${n}`
+  if (n < 1000000) return `${(n / 1000).toFixed(1)}K`
+  return `${(n / 1000000).toFixed(1)}M`
 }
