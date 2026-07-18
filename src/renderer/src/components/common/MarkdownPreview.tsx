@@ -13,6 +13,7 @@ import { imageApi } from '@/lib/ipc'
 import { parseLinks, replaceLinksWithHtml, maskCodeBlocks, escapeRawAngles } from '@/lib/link-parser'
 import { resolveLinks } from '@/lib/link-resolver'
 import { renderCodeBlock } from '@/lib/code-block'
+import { escapeHtml } from '@/lib/string-util'
 
 hljs.registerLanguage('javascript', javascript)
 hljs.registerLanguage('js', javascript)
@@ -34,7 +35,7 @@ codeRenderer.code = function ({ text, lang }: { text: string; lang?: string }) {
   const language = lang && hljs.getLanguage(lang) ? lang : undefined
   const highlighted = language
     ? hljs.highlight(text, { language }).value
-    : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    : escapeHtml(text)
   return renderCodeBlock(lang, text, highlighted)
 }
 
@@ -154,6 +155,12 @@ export default function MarkdownPreview({ content, streaming, mdFilePath, onLink
   const handleClick = useCallback((e: React.MouseEvent) => {
     const copyBtn = (e.target as HTMLElement).closest('.code-block__copy') as HTMLButtonElement | null
     if (copyBtn) {
+      // 流式中 effectiveContent 滞后,data-code 可能是残缺代码;此时不复制,只提示生成中。
+      if (streaming) {
+        copyBtn.textContent = '生成中…'
+        setTimeout(() => { copyBtn.textContent = '复制' }, 1200)
+        return
+      }
       const code = copyBtn.dataset.code ?? ''
       const seq = String((Number(copyBtn.dataset.seq ?? 0) + 1))
       copyBtn.dataset.seq = seq
@@ -179,7 +186,7 @@ export default function MarkdownPreview({ content, streaming, mdFilePath, onLink
     if (onLinkClick) {
       onLinkClick(id, type || 'deleted')
     }
-  }, [onLinkClick])
+  }, [onLinkClick, streaming])
 
   useEffect(() => {
     const id = 'wikilink-styles'

@@ -61,6 +61,9 @@ describe('summarizeToolResult', () => {
   it('失败:✗ + 首行片段', () => {
     expect(summarizeToolResult({ content: 'command not found\nexit 127', isError: true, chars: 20, lines: 2 })).toBe('✗ command not found')
   })
+  it('失败内容以空行开头(stderr/SDK 包装常见):取首个非空行,不退化为执行失败', () => {
+    expect(summarizeToolResult({ content: '\ncommand not found\nexit 127', isError: true, chars: 28, lines: 3 })).toBe('✗ command not found')
+  })
   it('失败但空:✗ 执行失败', () => {
     expect(summarizeToolResult({ content: '', isError: true, chars: 0, lines: 0 })).toBe('✗ 执行失败')
   })

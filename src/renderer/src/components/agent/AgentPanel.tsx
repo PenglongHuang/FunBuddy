@@ -6,7 +6,7 @@ import { useAgentStore } from '@/stores/agentStore'
 import { useToastStore } from '@/stores/toastStore'
 import { aiEvents, ai, dialog, fs } from '@/lib/ipc'
 import { summarizeToolInput, summarizeToolResult } from '@/lib/tool-input-summary'
-import { normalizeErrorMessage } from '@/lib/normalize-error'
+import { describeSystemError } from '@/lib/normalize-error'
 import type { AgentMessage, AgentTask, AgentTaskStatus, ProviderInfo, ToolUse } from '../../../../shared/agent-types'
 
 const TOOL_ICON: Record<string, string> = {
@@ -27,6 +27,17 @@ const INPUT_LINE_HEIGHT = 22
 const INPUT_MAX_LINES = 6
 const INPUT_PAD_Y = 18
 const INPUT_MAX_HEIGHT = INPUT_MAX_LINES * INPUT_LINE_HEIGHT + INPUT_PAD_Y
+
+/** 复制到剪贴板,返回是否成功。clipboard 不可用或写入 reject 都返回 false,避免谎报"已复制"。 */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (!navigator.clipboard) return false
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
 
 function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
   const [expanded, setExpanded] = useState<number | null>(null)
@@ -73,7 +84,7 @@ function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
                   <div>
                     <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 2, display: 'flex', justifyContent: 'space-between' }}>
                       <span>输出 <span style={{ color: resultColor }}>{result.isError ? '✗' : '✓'}</span></span>
-                      <span style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.6)' }} onClick={() => { navigator.clipboard?.writeText(result.content); useToastStore.getState().show('已复制输出') }}>复制</span>
+                      <span style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.6)' }} onClick={() => copyText(result.content).then((ok) => useToastStore.getState().show(ok ? '已复制输出' : '复制失败'))}>复制</span>
                     </div>
                     <pre style={{ ...PRE_STYLE, maxHeight: 240, overflowY: 'auto' }}>{result.content || '(空)'}</pre>
                   </div>
@@ -94,7 +105,7 @@ function ErrorCard({ prefix, title, detail, raw }: { prefix: string; title: stri
       <div role="alert">{prefix}{title}</div>
       {detail && <div style={{ color: 'rgba(255,69,58,0.7)', fontSize: 11, marginTop: 4, whiteSpace: 'pre-wrap', maxHeight: 80, overflowY: 'auto' }}>{detail}</div>}
       <button
-        onClick={() => { navigator.clipboard?.writeText(raw); useToastStore.getState().show('已复制错误信息') }}
+        onClick={() => copyText(raw).then((ok) => useToastStore.getState().show(ok ? '已复制错误信息' : '复制失败'))}
         style={{ marginTop: 6, fontSize: 11, color: '#FF453a', background: 'transparent', border: '1px solid rgba(255,69,58,0.4)', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}
       >复制错误</button>
     </div>
@@ -401,17 +412,10 @@ claude   # 登录`}
                 </div>
               )
             }
-            // system
-            if (m.kind === 'error') {
-              const raw = String((m.meta as { error?: string })?.error ?? '')
-              const { title, detail } = normalizeErrorMessage(raw)
-              return <ErrorCard key={i} prefix="⚠ " title={title} detail={detail} raw={raw} />
-            }
-            if (m.kind === 'result' && (m.meta as { isError?: boolean })?.isError) {
-              const meta = m.meta as { result?: string; subtype?: string }
-              const raw = String(meta.result || meta.subtype || '')
-              const { title, detail } = normalizeErrorMessage(raw)
-              return <ErrorCard key={i} prefix="⚠ 任务执行出错：" title={title} detail={detail} raw={raw} />
+            // system:error 与 result+isError 都走 describeSystemError,卡片与 toast 共用 prefix/title。
+            if (m.kind === 'error' || (m.kind === 'result' && (m.meta as { isError?: boolean })?.isError)) {
+              const { prefix, title, detail, raw } = describeSystemError(m)
+              return <ErrorCard key={i} prefix={prefix} title={title} detail={detail} raw={raw} />
             }
             return null
           })}

@@ -1,11 +1,4 @@
-/** HTML 属性值转义:data-code 存进去后,读 el.dataset.code 时浏览器自动反转义回原文。 */
-export function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
+import { escapeHtml } from './string-util'
 
 /**
  * 渲染带「语言标签 + 复制按钮」工具栏的代码块 HTML。

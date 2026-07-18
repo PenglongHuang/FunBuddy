@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeErrorMessage } from '../normalize-error'
+import { normalizeErrorMessage, describeSystemError } from '../normalize-error'
 
 describe('normalizeErrorMessage', () => {
   it('空串/纯空白 → 未知错误', () => {
@@ -51,5 +51,28 @@ describe('normalizeErrorMessage', () => {
     const r = normalizeErrorMessage('fetch failed: 401 Unauthorized')
     expect(r.title).toBe('fetch failed: 401 Unauthorized')
     expect(r.detail).toBe('')
+  })
+})
+
+describe('describeSystemError', () => {
+  it('error kind:prefix "⚠ ",raw 取 meta.error', () => {
+    const r = describeSystemError({ kind: 'error', meta: { error: 'Error: boom' } })
+    expect(r).toEqual({ prefix: '⚠ ', title: 'boom', detail: 'Error: boom', raw: 'Error: boom' })
+  })
+  it('result+isError kind:prefix "⚠ 任务执行出错：",raw 取 meta.result', () => {
+    const r = describeSystemError({ kind: 'result', meta: { isError: true, result: 'Error: x' } })
+    expect(r.prefix).toBe('⚠ 任务执行出错：')
+    expect(r.title).toBe('x')
+    expect(r.raw).toBe('Error: x')
+  })
+  it('result+isError 只有 subtype 时 raw 取 subtype', () => {
+    const r = describeSystemError({ kind: 'result', meta: { isError: true, subtype: 'Error: y' } })
+    expect(r.title).toBe('y')
+    expect(r.raw).toBe('Error: y')
+  })
+  it('error 空 → 未知错误', () => {
+    const r = describeSystemError({ kind: 'error', meta: {} })
+    expect(r.title).toBe('未知错误')
+    expect(r.raw).toBe('')
   })
 })

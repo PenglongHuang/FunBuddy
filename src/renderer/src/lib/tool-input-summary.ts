@@ -1,4 +1,5 @@
 import type { ToolResult } from '../../../shared/agent-types'
+import { firstNonEmptyLine } from './string-util'
 
 /**
  * 从工具入参里取一句最显眼的摘要(文件名/命令/模式等),用于胶囊显示。
@@ -60,7 +61,7 @@ function clip(s: string, max = 60): string {
 /** 生成 tool_result 的一行摘要,贴在 ToolPill 文案后。chars 是字符数(非字节)。 */
 export function summarizeToolResult(r: ToolResult): string {
   if (r.isError) {
-    const first = (r.content.split(/\r?\n/)[0] ?? '').trim()
+    const first = firstNonEmptyLine(r.content)
     return '✗ ' + clip(first || '执行失败', 40)
   }
   if (!r.content || r.chars === 0) return '✓ 空'

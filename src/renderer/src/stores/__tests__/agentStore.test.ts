@@ -293,16 +293,16 @@ describe('agentStore', () => {
     expect(toastShow).toHaveBeenCalledWith('⚠ boom')
   })
 
-  it('ingest result isError 时弹归一化后的 toast', () => {
+  it('ingest result isError 时弹归一化后的 toast(prefix 与卡片一致:⚠ 任务执行出错：)', () => {
     const taskId = useAgentStore.getState().createTask('t', '/ws')
     useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'result', meta: { isError: true, result: 'Error: x' } })
-    expect(toastShow).toHaveBeenCalledWith('⚠ x')
+    expect(toastShow).toHaveBeenCalledWith('⚠ 任务执行出错：x')
   })
 
   it('ingest result isError 只有 subtype 时也取到并弹归一化 toast', () => {
     const taskId = useAgentStore.getState().createTask('t', '/ws')
     useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'result', meta: { isError: true, subtype: 'Error: y' } })
-    expect(toastShow).toHaveBeenCalledWith('⚠ y')
+    expect(toastShow).toHaveBeenCalledWith('⚠ 任务执行出错：y')
   })
 
   it('ingest tool_result 按 toolUseId 关联到 assistant.toolUses[i].result', () => {
