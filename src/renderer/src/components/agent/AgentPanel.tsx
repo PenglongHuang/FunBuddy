@@ -365,7 +365,7 @@ claude   # 登录`}
                 <div key={i} style={{ alignSelf: 'flex-start', maxWidth: '88%', display: 'flex', flexDirection: 'column', gap: 0 }}>
                   {m.text && (
                     <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>
-                      <MarkdownPreview content={m.text} linkTarget="_blank" />
+                      <MarkdownPreview content={m.text} linkTarget="_blank" streaming={streaming} />
                       {streaming && <span className="fb-cursor">▋</span>}
                     </div>
                   )}

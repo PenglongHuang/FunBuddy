@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react'
 import { marked, type Tokens } from 'marked'
 import hljs from 'highlight.js/lib/core'
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -40,31 +40,37 @@ codeRenderer.code = function ({ text, lang }: { text: string; lang?: string }) {
 
 interface MarkdownPreviewProps {
   content: string
+  streaming?: boolean
   mdFilePath?: string
   onLinkClick?: (id: string, type: string) => void
   linkTarget?: '_blank'
 }
 
-export default function MarkdownPreview({ content, mdFilePath, onLinkClick, linkTarget }: MarkdownPreviewProps) {
+export default function MarkdownPreview({ content, streaming, mdFilePath, onLinkClick, linkTarget }: MarkdownPreviewProps) {
+  // 流式时让 markdown 渲染慢半拍跟随,避免每个 token 都阻塞重 parse。
+  // 非流式(Notes/Planner 等)默认即时,行为不变。
+  const deferredContent = useDeferredValue(content)
+  const effectiveContent = streaming ? deferredContent : content
+
   const [imageMap, setImageMap] = useState<Record<string, string>>({})
 
   const imageRefs = useMemo(() => {
     const refs: string[] = []
     const regex = /!\[[^\]]*\]\(([^)]*\/assets\/[^)]+)\)/g
     let match
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = regex.exec(effectiveContent)) !== null) {
       if (match[1]) refs.push(match[1])
     }
     return refs
-  }, [content])
+  }, [effectiveContent])
 
   const imageRefsKey = imageRefs.join(',')
 
   const [resolvedLinkMap, setResolvedLinkMap] = useState<Map<string, any>>(new Map())
 
   const { masked: maskedContent, restore: restoreCodeBlocks } = useMemo(
-    () => maskCodeBlocks(content),
-    [content],
+    () => maskCodeBlocks(effectiveContent),
+    [effectiveContent],
   )
 
   useEffect(() => {
