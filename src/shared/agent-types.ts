@@ -1,12 +1,25 @@
+export interface ToolResult {
+  content: string
+  isError: boolean
+  /** content 字符数(UTF-16 code unit 计,非字节) */
+  chars: number
+  /** content 换行数 */
+  lines: number
+}
+
 export interface ToolUse {
   name: string
   input?: unknown
+  /** tool_use_id:关联后续 tool_result 用 */
+  id?: string
+  /** 工具执行结果(由 tool_result 按 id 关联回填) */
+  result?: ToolResult
 }
 
 export type AgentMessage =
   | { role: 'user'; text: string }
   | { role: 'assistant'; text: string; toolUses: ToolUse[]; id?: string; partial?: boolean }
-  | { role: 'system'; kind: 'init' | 'result' | 'error'; meta?: Record<string, unknown> }
+  | { role: 'system'; kind: 'init' | 'result' | 'error' | 'tool_result'; meta?: Record<string, unknown> }
 
 export type AgentTaskStatus = 'running' | 'idle' | 'error' | 'stopped'
 
