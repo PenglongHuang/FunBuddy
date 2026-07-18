@@ -23,6 +23,11 @@ const STATUS_META: Record<AgentTaskStatus, { dot: string; label: string; color: 
 /** 系统级错误横幅的共享样式(kind==='error' 与 result+isError 复用)。 */
 const SYSTEM_ERROR_STYLE = { alignSelf: 'center', fontSize: 11, color: '#FF453a' } as const
 
+const INPUT_LINE_HEIGHT = 22
+const INPUT_MAX_LINES = 6
+const INPUT_PAD_Y = 18
+const INPUT_MAX_HEIGHT = INPUT_MAX_LINES * INPUT_LINE_HEIGHT + INPUT_PAD_Y
+
 function ToolPills({ toolUses }: { toolUses: { name: string; input?: unknown }[] }) {
   const [expanded, setExpanded] = useState<number | null>(null)
   if (toolUses.length === 0) return null
@@ -163,6 +168,7 @@ export default function AgentPanel() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
+  const taRef = useRef<HTMLTextAreaElement>(null)
 
   // 初始化默认工作空间 + 探活 Claude
   useEffect(() => {
@@ -212,6 +218,12 @@ export default function AgentPanel() {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
     }
   }, [activeMessages])
+
+  // 发送后 input 清空,但 onChange 不会再触发,需手动重置自适应高度
+  useEffect(() => {
+    const el = taRef.current
+    if (el && !input) el.style.height = 'auto'
+  }, [input])
 
   const activeTask = tasks.find((t) => t.taskId === activeTaskId) ?? null
   const isRunning = activeTask?.status === 'running'
@@ -385,14 +397,34 @@ claude   # 登录`}
       </div>
 
       {/* 输入区 */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px', borderTop: '0.5px solid rgba(255,255,255,0.08)' }}>
-        <input
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: '8px 10px', borderTop: '0.5px solid rgba(255,255,255,0.08)' }}>
+        <textarea
+          ref={taRef}
           value={input}
           disabled={isRunning}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-          placeholder={isRunning ? '生成中...' : '输入消息,回车发送...(同一会话内追问会带上历史)'}
-          style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(10,132,255,0.3)', borderRadius: 11, padding: '9px 13px', color: 'rgba(255,255,255,0.9)', fontSize: 13, outline: 'none', opacity: isRunning ? 0.6 : 1 }}
+          onChange={(e) => {
+            setInput(e.target.value)
+            // 自适应高度:重置后按 scrollHeight 撑开,封顶 6 行
+            const el = e.target
+            el.style.height = 'auto'
+            el.style.height = Math.min(el.scrollHeight, INPUT_MAX_HEIGHT) + 'px'
+          }}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              handleSend()
+            }
+          }}
+          rows={1}
+          placeholder={isRunning ? '生成中...' : '输入消息,回车发送 / Shift+回车换行...(同一会话内追问会带上历史)'}
+          style={{
+            flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(10,132,255,0.3)',
+            borderRadius: 11, padding: '9px 13px', color: 'rgba(255,255,255,0.9)', fontSize: 13,
+            outline: 'none', opacity: isRunning ? 0.6 : 1, resize: 'none',
+            lineHeight: `${INPUT_LINE_HEIGHT}px`, minHeight: 40, maxHeight: INPUT_MAX_HEIGHT,
+            overflowY: 'auto', fontFamily: 'inherit',
+          }}
         />
         {isRunning ? (
           <button onClick={() => activeTaskId && stopTask(activeTaskId)} style={{ background: 'rgba(255,69,58,0.18)', border: '1px solid rgba(255,69,58,0.4)', color: '#FF453a', borderRadius: 10, padding: '8px 14px', fontSize: 12, cursor: 'pointer' }}>
