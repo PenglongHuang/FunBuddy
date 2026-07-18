@@ -5,6 +5,7 @@ import { ai, fs } from '@/lib/ipc'
 import { useToastStore } from './toastStore'
 import { normalizeErrorMessage } from '@/lib/normalize-error'
 import type { AgentMessage, AgentTask } from '../../../shared/agent-types'
+import { locateToolUse } from '../../../shared/tool-result-util'
 
 /**
  * 会话消息视图:按 taskId 索引的纯内存数组。运行中由 provider 流式 ingest;
@@ -133,6 +134,24 @@ export const useAgentStore = create<AgentStore>()(
           } else if (msg.kind === 'error') {
             t.status = 'error'
             t.updatedAt = Date.now()
+          }
+          // tool_result:按 toolUseId 关联到所属 assistant.toolUses[i].result。
+          // 不写入 _messages(避免成为独立消息),不弹 toast;找不到归属(如 id 不匹配)安全忽略。
+          if (msg.kind === 'tool_result') {
+            const toolUseId = String((msg.meta as { toolUseId?: string })?.toolUseId ?? '')
+            const content = String((msg.meta as { content?: string })?.content ?? '')
+            const isError = !!(msg.meta as { isError?: boolean })?.isError
+            const chars = Number((msg.meta as { chars?: number })?.chars ?? 0)
+            const lines = Number((msg.meta as { lines?: number })?.lines ?? 0)
+            const arr = s._messages[taskId] ?? []
+            const loc = locateToolUse(arr, toolUseId)
+            if (loc) {
+              const owner = arr[loc.msgIdx]
+              if (owner.role === 'assistant') {
+                owner.toolUses[loc.toolIdx].result = { content, isError, chars, lines }
+              }
+            }
+            return
           }
           // 仅把错误写入 _messages 供 UI 渲染;成功 result 不入库,避免逐轮堆积
           if (msg.kind === 'error' || (msg.kind === 'result' && msg.meta?.isError)) {
