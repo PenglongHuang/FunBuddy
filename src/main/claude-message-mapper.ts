@@ -43,3 +43,31 @@ export function mapToAgentMessage(msg: SDKMessage): AgentMessage | null {
   // stream_event / user / 其他:MVP 忽略
   return null
 }
+
+/**
+ * 从 SDK user 消息提取 tool_result 列表(content 归一成字符串)。
+ * 用于 live 流:claude-code 收到 user 消息时逐个发 system.tool_result。
+ */
+export function extractToolResults(msg: SDKMessage): { toolUseId: string; content: string; isError: boolean }[] {
+  if (msg.type !== 'user') return []
+  const blocks = ((msg as any).message?.content ?? []) as Array<{
+    type: string
+    tool_use_id?: string
+    content?: unknown
+    is_error?: boolean
+  }>
+  const out: { toolUseId: string; content: string; isError: boolean }[] = []
+  for (const b of blocks) {
+    if (b.type !== 'tool_result' || !b.tool_use_id) continue
+    out.push({ toolUseId: b.tool_use_id, content: flattenToolResultContent(b.content), isError: !!b.is_error })
+  }
+  return out
+}
+
+function flattenToolResultContent(c: unknown): string {
+  if (typeof c === 'string') return c
+  if (Array.isArray(c)) {
+    return c.map((x: any) => (x && typeof x.text === 'string' ? x.text : '')).join('')
+  }
+  return c == null ? '' : String(c)
+}
