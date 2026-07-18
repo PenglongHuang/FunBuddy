@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react'
 import { marked, type Tokens } from 'marked'
 import hljs from 'highlight.js/lib/core'
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -12,6 +12,8 @@ import markdown from 'highlight.js/lib/languages/markdown'
 import { imageApi } from '@/lib/ipc'
 import { parseLinks, replaceLinksWithHtml, maskCodeBlocks, escapeRawAngles } from '@/lib/link-parser'
 import { resolveLinks } from '@/lib/link-resolver'
+import { renderCodeBlock } from '@/lib/code-block'
+import { escapeHtml } from '@/lib/string-util'
 
 hljs.registerLanguage('javascript', javascript)
 hljs.registerLanguage('js', javascript)
@@ -33,37 +35,43 @@ codeRenderer.code = function ({ text, lang }: { text: string; lang?: string }) {
   const language = lang && hljs.getLanguage(lang) ? lang : undefined
   const highlighted = language
     ? hljs.highlight(text, { language }).value
-    : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  return `<pre><code class="hljs language-${lang || 'plaintext'}">${highlighted}</code></pre>`
+    : escapeHtml(text)
+  return renderCodeBlock(lang, text, highlighted)
 }
 
 interface MarkdownPreviewProps {
   content: string
+  streaming?: boolean
   mdFilePath?: string
   onLinkClick?: (id: string, type: string) => void
   linkTarget?: '_blank'
 }
 
-export default function MarkdownPreview({ content, mdFilePath, onLinkClick, linkTarget }: MarkdownPreviewProps) {
+export default function MarkdownPreview({ content, streaming, mdFilePath, onLinkClick, linkTarget }: MarkdownPreviewProps) {
+  // 流式时让 markdown 渲染慢半拍跟随,避免每个 token 都阻塞重 parse。
+  // 非流式(Notes/Planner 等)默认即时,行为不变。
+  const deferredContent = useDeferredValue(content)
+  const effectiveContent = streaming ? deferredContent : content
+
   const [imageMap, setImageMap] = useState<Record<string, string>>({})
 
   const imageRefs = useMemo(() => {
     const refs: string[] = []
     const regex = /!\[[^\]]*\]\(([^)]*\/assets\/[^)]+)\)/g
     let match
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = regex.exec(effectiveContent)) !== null) {
       if (match[1]) refs.push(match[1])
     }
     return refs
-  }, [content])
+  }, [effectiveContent])
 
   const imageRefsKey = imageRefs.join(',')
 
   const [resolvedLinkMap, setResolvedLinkMap] = useState<Map<string, any>>(new Map())
 
   const { masked: maskedContent, restore: restoreCodeBlocks } = useMemo(
-    () => maskCodeBlocks(content),
-    [content],
+    () => maskCodeBlocks(effectiveContent),
+    [effectiveContent],
   )
 
   useEffect(() => {
@@ -145,6 +153,29 @@ export default function MarkdownPreview({ content, mdFilePath, onLinkClick, link
   }, [processedContent, renderer])
 
   const handleClick = useCallback((e: React.MouseEvent) => {
+    const copyBtn = (e.target as HTMLElement).closest('.code-block__copy') as HTMLButtonElement | null
+    if (copyBtn) {
+      // 流式中 effectiveContent 滞后,data-code 可能是残缺代码;此时不复制,只提示生成中。
+      if (streaming) {
+        copyBtn.textContent = '生成中…'
+        setTimeout(() => { copyBtn.textContent = '复制' }, 1200)
+        return
+      }
+      const code = copyBtn.dataset.code ?? ''
+      const seq = String((Number(copyBtn.dataset.seq ?? 0) + 1))
+      copyBtn.dataset.seq = seq
+      navigator.clipboard?.writeText(code)
+        .then(() => {
+          if (copyBtn.dataset.seq !== seq) return
+          copyBtn.textContent = '已复制 ✓'
+          setTimeout(() => {
+            if (copyBtn.dataset.seq !== seq) return
+            copyBtn.textContent = '复制'
+          }, 1200)
+        })
+        .catch(() => { /* 权限拒绝/非安全上下文:静默无反馈 */ })
+      return
+    }
     const target = (e.target as HTMLElement).closest('.wikilink') as HTMLElement | null
     if (!target) return
     const id = target.dataset.linkId
@@ -155,7 +186,7 @@ export default function MarkdownPreview({ content, mdFilePath, onLinkClick, link
     if (onLinkClick) {
       onLinkClick(id, type || 'deleted')
     }
-  }, [onLinkClick])
+  }, [onLinkClick, streaming])
 
   useEffect(() => {
     const id = 'wikilink-styles'

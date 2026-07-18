@@ -20,6 +20,12 @@ vi.mock('@/lib/ipc', () => ({
   },
 }))
 
+// vi.hoisted 保证 toastShow 在 vi.mock 工厂运行时就已就绪(避免顶层 const 的 TDZ)
+const toastShow = vi.hoisted(() => vi.fn())
+vi.mock('@/stores/toastStore', () => ({
+  useToastStore: { getState: () => ({ show: toastShow }) },
+}))
+
 describe('agentStore', () => {
   beforeEach(() => {
     useAgentStore.getState().reset()
@@ -279,5 +285,49 @@ describe('agentStore', () => {
     expect(fs.readFile).toHaveBeenCalledWith('agent-sessions.json')
     expect(useAgentStore.getState().migratedDropped).toBe(2)
     expect(fs.deleteFile).toHaveBeenCalledWith('agent-sessions.json')
+  })
+
+  it('ingest error 时弹归一化后的 toast(title 去掉 Error: 前缀)', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'error', meta: { error: 'Error: boom' } })
+    expect(toastShow).toHaveBeenCalledWith('⚠ boom')
+  })
+
+  it('ingest result isError 时弹归一化后的 toast(prefix 与卡片一致:⚠ 任务执行出错：)', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'result', meta: { isError: true, result: 'Error: x' } })
+    expect(toastShow).toHaveBeenCalledWith('⚠ 任务执行出错：x')
+  })
+
+  it('ingest result isError 只有 subtype 时也取到并弹归一化 toast', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'result', meta: { isError: true, subtype: 'Error: y' } })
+    expect(toastShow).toHaveBeenCalledWith('⚠ 任务执行出错：y')
+  })
+
+  it('ingest tool_result 按 toolUseId 关联到 assistant.toolUses[i].result', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    const store = useAgentStore.getState()
+    store.ingest(taskId, {
+      role: 'assistant', text: '', id: 'a#1', partial: false,
+      toolUses: [{ name: 'Read', id: 'tu-1' }],
+    })
+    store.ingest(taskId, {
+      role: 'system', kind: 'tool_result',
+      meta: { toolUseId: 'tu-1', content: 'hello\nworld', isError: false, chars: 11, lines: 2 },
+    })
+    const msgs = useAgentStore.getState().getMessages(taskId)
+    const am = msgs.find((m) => m.role === 'assistant')
+    if (!am || am.role !== 'assistant') throw new Error('expected assistant')
+    expect(am.toolUses[0].result).toEqual({ content: 'hello\nworld', isError: false, chars: 11, lines: 2 })
+  })
+
+  it('ingest tool_result 找不到归属时安全忽略(不抛错、不入新消息)', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().ingest(taskId, {
+      role: 'system', kind: 'tool_result',
+      meta: { toolUseId: 'nope', content: 'x', isError: false, chars: 1, lines: 1 },
+    })
+    expect(useAgentStore.getState().getMessages(taskId)).toHaveLength(0)
   })
 })

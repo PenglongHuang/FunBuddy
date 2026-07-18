@@ -10,6 +10,7 @@ import xml from 'highlight.js/lib/languages/xml'
 import markdown from 'highlight.js/lib/languages/markdown'
 import { imageApi } from './ipc'
 import { escapeRawAngles } from './link-parser'
+import { escapeHtml } from './string-util'
 
 // Register languages (same as MarkdownPreview)
 hljs.registerLanguage('javascript', javascript)
@@ -155,10 +156,6 @@ ${metaHtml}
 <div class="markdown-body">${body}</div>
 </body>
 </html>`
-}
-
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 function escapeAttr(str: string): string {

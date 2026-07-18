@@ -1,3 +1,5 @@
+import { escapeHtml } from './string-util'
+
 const WIKILINK_REGEX = /\[\[([a-zA-Z0-9_-]{6,21})\|((?:[^\]]|\](?!\]))*)\]\]/g
 
 export interface ParsedLink {
@@ -68,10 +70,6 @@ export function escapeRawAngles(text: string): string {
     }
   }
   return result
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 const FENCED_CODE_REGEX = /(`{3,}|~{3,})([\s\S]*?)\1/g

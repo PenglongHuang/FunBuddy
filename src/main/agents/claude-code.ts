@@ -3,8 +3,9 @@ import path from 'node:path'
 import { app } from 'electron'
 import { spawn } from 'child_process'
 import { query } from '@anthropic-ai/claude-agent-sdk'
-import { mapToAgentMessage } from '../claude-message-mapper'
+import { mapToAgentMessage, extractToolResults } from '../claude-message-mapper'
 import { TurnAssembler, type StreamEvent } from '../claude-stream-assembler'
+import { summarizeToolResultSize } from '../../shared/tool-result-util'
 import type { AgentMessage, ProviderInfo } from '../../shared/agent-types'
 import type { CodingAgentProvider, ProviderStartOptions } from './types'
 import { NOTES_SYSTEM_PROMPT } from './notes-system-prompt'
@@ -179,6 +180,17 @@ export const claudeCodeProvider: CodingAgentProvider = {
         }
         if (sdkMsg.type === 'assistant') {
           finalizeTurn(sdkMsg, st, taskId, callId, onMessage)
+          continue
+        }
+        if (sdkMsg.type === 'user') {
+          for (const r of extractToolResults(sdkMsg)) {
+            const { chars, lines } = summarizeToolResultSize(r.content)
+            onMessage({
+              role: 'system',
+              kind: 'tool_result',
+              meta: { toolUseId: r.toolUseId, content: r.content, isError: r.isError, chars, lines },
+            })
+          }
           continue
         }
         const mapped = mapToAgentMessage(sdkMsg)

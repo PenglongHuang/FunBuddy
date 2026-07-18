@@ -5,8 +5,9 @@ import MarkdownPreview from '@/components/common/MarkdownPreview'
 import { useAgentStore } from '@/stores/agentStore'
 import { useToastStore } from '@/stores/toastStore'
 import { aiEvents, ai, dialog, fs } from '@/lib/ipc'
-import { summarizeToolInput } from '@/lib/tool-input-summary'
-import type { AgentMessage, AgentTask, AgentTaskStatus, ProviderInfo } from '../../../../shared/agent-types'
+import { summarizeToolInput, summarizeToolResult } from '@/lib/tool-input-summary'
+import { describeSystemError } from '@/lib/normalize-error'
+import type { AgentMessage, AgentTask, AgentTaskStatus, ProviderInfo, ToolUse } from '../../../../shared/agent-types'
 
 const TOOL_ICON: Record<string, string> = {
   Read: '📖', Write: '📝', Edit: '✏️', Bash: '💻', Glob: '🔍', Grep: '🔎',
@@ -20,10 +21,25 @@ const STATUS_META: Record<AgentTaskStatus, { dot: string; label: string; color: 
   stopped: { dot: '○', label: '已停止', color: 'rgba(255,255,255,0.4)' },
 }
 
-/** 系统级错误横幅的共享样式(kind==='error' 与 result+isError 复用)。 */
-const SYSTEM_ERROR_STYLE = { alignSelf: 'center', fontSize: 11, color: '#FF453a' } as const
+const PRE_STYLE = { margin: 0, fontSize: 10.5, lineHeight: 1.4, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, padding: '6px 8px', color: 'rgba(255,255,255,0.65)', whiteSpace: 'pre-wrap' } as const
 
-function ToolPills({ toolUses }: { toolUses: { name: string; input?: unknown }[] }) {
+const INPUT_LINE_HEIGHT = 22
+const INPUT_MAX_LINES = 6
+const INPUT_PAD_Y = 18
+const INPUT_MAX_HEIGHT = INPUT_MAX_LINES * INPUT_LINE_HEIGHT + INPUT_PAD_Y
+
+/** 复制到剪贴板,返回是否成功。clipboard 不可用或写入 reject 都返回 false,避免谎报"已复制"。 */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (!navigator.clipboard) return false
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
   const [expanded, setExpanded] = useState<number | null>(null)
   if (toolUses.length === 0) return null
   return (
@@ -33,37 +49,65 @@ function ToolPills({ toolUses }: { toolUses: { name: string; input?: unknown }[]
         const isEdit = t.name === 'Edit' || t.name === 'Write'
         const isOpen = expanded === i
         const hasInput = t.input != null
+        const result = t.result
+        const canExpand = hasInput || !!result
+        const resultLine = result ? summarizeToolResult(result) : ''
+        const resultColor = result?.isError ? '#FF453a' : '#30D158'
         return (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, maxWidth: '100%' }}>
             <span
-              onClick={hasInput ? () => setExpanded(isOpen ? null : i) : undefined}
+              onClick={canExpand ? () => setExpanded(isOpen ? null : i) : undefined}
               style={{
                 fontSize: 11, padding: '3px 9px', borderRadius: 11,
-                cursor: hasInput ? 'pointer' : 'default',
+                cursor: canExpand ? 'pointer' : 'default',
                 display: 'inline-flex', alignItems: 'center', gap: 5,
                 background: isEdit ? 'rgba(255,159,10,0.1)' : 'rgba(255,255,255,0.06)',
                 border: `1px solid ${isEdit ? 'rgba(255,159,10,0.3)' : 'rgba(255,255,255,0.1)'}`,
                 color: isEdit ? '#FF9F0A' : 'rgba(255,255,255,0.7)',
-                maxWidth: '100%',
               }}
             >
               <span>{TOOL_ICON[t.name] ?? '🔧'} {t.name}{summary ? ` · ${summary}` : ''}</span>
-              {hasInput && (
+              {resultLine && <span style={{ color: resultColor }}>{resultLine}</span>}
+              {canExpand && (
                 <ChevronRight size={11} style={{ flexShrink: 0, opacity: 0.55, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s ease' }} />
               )}
             </span>
-            {isOpen && t.input != null && (
-              <pre style={{
-                margin: 0, maxWidth: '100%', overflowX: 'auto', fontSize: 10.5, lineHeight: 1.4,
-                background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 8, padding: '6px 8px', color: 'rgba(255,255,255,0.65)', whiteSpace: 'pre-wrap',
-              }}>
-                {JSON.stringify(t.input, null, 2)}
-              </pre>
+            {isOpen && canExpand && (
+              <div style={{ width: '100%', maxWidth: 460, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {hasInput && (
+                  <div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>输入</div>
+                    <pre style={PRE_STYLE}>{JSON.stringify(t.input, null, 2)}</pre>
+                  </div>
+                )}
+                {result && (
+                  <div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 2, display: 'flex', justifyContent: 'space-between' }}>
+                      <span>输出 <span style={{ color: resultColor }}>{result.isError ? '✗' : '✓'}</span></span>
+                      <span style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.6)' }} onClick={() => copyText(result.content).then((ok) => useToastStore.getState().show(ok ? '已复制输出' : '复制失败'))}>复制</span>
+                    </div>
+                    <pre style={{ ...PRE_STYLE, maxHeight: 240, overflowY: 'auto' }}>{result.content || '(空)'}</pre>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/** 错误卡片:归一化标题 + 可折叠原文 + 复制错误。error 与 result+isError 复用。 */
+function ErrorCard({ prefix, title, detail, raw }: { prefix: string; title: string; detail: string; raw: string }) {
+  return (
+    <div style={{ alignSelf: 'center', maxWidth: '88%', background: 'rgba(255,69,58,0.08)', border: '1px solid rgba(255,69,58,0.3)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#FF453a' }}>
+      <div role="alert">{prefix}{title}</div>
+      {detail && <div style={{ color: 'rgba(255,69,58,0.7)', fontSize: 11, marginTop: 4, whiteSpace: 'pre-wrap', maxHeight: 80, overflowY: 'auto' }}>{detail}</div>}
+      <button
+        onClick={() => copyText(raw).then((ok) => useToastStore.getState().show(ok ? '已复制错误信息' : '复制失败'))}
+        style={{ marginTop: 6, fontSize: 11, color: '#FF453a', background: 'transparent', border: '1px solid rgba(255,69,58,0.4)', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}
+      >复制错误</button>
     </div>
   )
 }
@@ -163,6 +207,7 @@ export default function AgentPanel() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
+  const taRef = useRef<HTMLTextAreaElement>(null)
 
   // 初始化默认工作空间 + 探活 Claude
   useEffect(() => {
@@ -212,6 +257,12 @@ export default function AgentPanel() {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
     }
   }, [activeMessages])
+
+  // 发送后 input 清空,但 onChange 不会再触发,需手动重置自适应高度
+  useEffect(() => {
+    const el = taRef.current
+    if (el && !input) el.style.height = 'auto'
+  }, [input])
 
   const activeTask = tasks.find((t) => t.taskId === activeTaskId) ?? null
   const isRunning = activeTask?.status === 'running'
@@ -353,7 +404,7 @@ claude   # 登录`}
                 <div key={i} style={{ alignSelf: 'flex-start', maxWidth: '88%', display: 'flex', flexDirection: 'column', gap: 0 }}>
                   {m.text && (
                     <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>
-                      <MarkdownPreview content={m.text} linkTarget="_blank" />
+                      <MarkdownPreview content={m.text} linkTarget="_blank" streaming={streaming} />
                       {streaming && <span className="fb-cursor">▋</span>}
                     </div>
                   )}
@@ -361,15 +412,10 @@ claude   # 登录`}
                 </div>
               )
             }
-            // system
-            if (m.kind === 'error') {
-              const error = (m.meta as { error?: string })?.error
-              return <div key={i} style={SYSTEM_ERROR_STYLE}>⚠ 出错了{error ? `: ${error}` : ''}</div>
-            }
-            if (m.kind === 'result' && (m.meta as { isError?: boolean })?.isError) {
-              const meta = m.meta as { result?: string; subtype?: string }
-              const detail = meta.result || meta.subtype
-              return <div key={i} style={SYSTEM_ERROR_STYLE}>⚠ 任务执行出错{detail ? `: ${detail}` : ''}</div>
+            // system:error 与 result+isError 都走 describeSystemError,卡片与 toast 共用 prefix/title。
+            if (m.kind === 'error' || (m.kind === 'result' && (m.meta as { isError?: boolean })?.isError)) {
+              const { prefix, title, detail, raw } = describeSystemError(m)
+              return <ErrorCard key={i} prefix={prefix} title={title} detail={detail} raw={raw} />
             }
             return null
           })}
@@ -385,14 +431,34 @@ claude   # 登录`}
       </div>
 
       {/* 输入区 */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px', borderTop: '0.5px solid rgba(255,255,255,0.08)' }}>
-        <input
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: '8px 10px', borderTop: '0.5px solid rgba(255,255,255,0.08)' }}>
+        <textarea
+          ref={taRef}
           value={input}
           disabled={isRunning}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-          placeholder={isRunning ? '生成中...' : '输入消息,回车发送...(同一会话内追问会带上历史)'}
-          style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(10,132,255,0.3)', borderRadius: 11, padding: '9px 13px', color: 'rgba(255,255,255,0.9)', fontSize: 13, outline: 'none', opacity: isRunning ? 0.6 : 1 }}
+          onChange={(e) => {
+            setInput(e.target.value)
+            // 自适应高度:重置后按 scrollHeight 撑开,封顶 6 行
+            const el = e.target
+            el.style.height = 'auto'
+            el.style.height = Math.min(el.scrollHeight, INPUT_MAX_HEIGHT) + 'px'
+          }}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              handleSend()
+            }
+          }}
+          rows={1}
+          placeholder={isRunning ? '生成中...' : '输入消息,回车发送 / Shift+回车换行...(同一会话内追问会带上历史)'}
+          style={{
+            flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(10,132,255,0.3)',
+            borderRadius: 11, padding: '9px 13px', color: 'rgba(255,255,255,0.9)', fontSize: 13,
+            outline: 'none', opacity: isRunning ? 0.6 : 1, resize: 'none',
+            lineHeight: `${INPUT_LINE_HEIGHT}px`, minHeight: 40, maxHeight: INPUT_MAX_HEIGHT,
+            overflowY: 'auto', fontFamily: 'inherit',
+          }}
         />
         {isRunning ? (
           <button onClick={() => activeTaskId && stopTask(activeTaskId)} style={{ background: 'rgba(255,69,58,0.18)', border: '1px solid rgba(255,69,58,0.4)', color: '#FF453a', borderRadius: 10, padding: '8px 14px', fontSize: 12, cursor: 'pointer' }}>

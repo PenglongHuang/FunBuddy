@@ -1,5 +1,6 @@
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { AgentMessage, ToolUse } from '../shared/agent-types'
+import type { AgentMessage } from '../shared/agent-types'
+import { extractMessageParts, type RawToolResult } from '../shared/content-blocks'
 
 /**
  * 把 SDK 的 SDKMessage 映射成 renderer 用的 AgentMessage。
@@ -16,13 +17,7 @@ export function mapToAgentMessage(msg: SDKMessage): AgentMessage | null {
   }
 
   if (msg.type === 'assistant') {
-    const blocks = ((msg as any).message?.content ?? []) as Array<{ type: string; text?: string; name?: string; input?: unknown }>
-    let text = ''
-    const toolUses: ToolUse[] = []
-    for (const b of blocks) {
-      if (b.type === 'text' && typeof b.text === 'string') text += b.text
-      else if (b.type === 'tool_use' && b.name) toolUses.push({ name: b.name, input: b.input })
-    }
+    const { text, toolUses } = extractMessageParts((msg as any).message?.content)
     return { role: 'assistant', text, toolUses }
   }
 
@@ -42,4 +37,13 @@ export function mapToAgentMessage(msg: SDKMessage): AgentMessage | null {
 
   // stream_event / user / 其他:MVP 忽略
   return null
+}
+
+/**
+ * 从 SDK user 消息提取 tool_result 列表(content 归一成字符串)。
+ * 用于 live 流:claude-code 收到 user 消息时逐个发 system.tool_result。
+ */
+export function extractToolResults(msg: SDKMessage): RawToolResult[] {
+  if (msg.type !== 'user') return []
+  return extractMessageParts((msg as any).message?.content).toolResults
 }

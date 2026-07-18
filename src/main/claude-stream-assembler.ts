@@ -9,6 +9,7 @@
 export interface AssemblerToolUse {
   name: string
   input?: unknown
+  id?: string
 }
 
 export interface AssemblerEmit {
@@ -23,7 +24,7 @@ export interface AssemblerEmit {
 /** 我们消费的 Anthropic 流事件的窄结构视图。 */
 export type StreamEvent =
   | { type: 'message_start' }
-  | { type: 'content_block_start'; index: number; content_block: { type: string; name?: string } }
+  | { type: 'content_block_start'; index: number; content_block: { type: string; name?: string; id?: string } }
   | {
       type: 'content_block_delta'
       index: number
@@ -34,6 +35,7 @@ export type StreamEvent =
 
 interface ToolSlot {
   name: string
+  id?: string
   raw: string
   input?: unknown
 }
@@ -52,7 +54,7 @@ export class TurnAssembler {
       case 'content_block_start': {
         const cb = event.content_block
         if (cb.type === 'tool_use' && cb.name) {
-          this.toolByIndex.set(event.index, { name: cb.name, raw: '' })
+          this.toolByIndex.set(event.index, { name: cb.name, id: cb.id, raw: '' })
         }
         return this.emit(true)
       }
@@ -86,7 +88,7 @@ export class TurnAssembler {
   finalize(finalText: string, finalTools: AssemblerToolUse[]): AssemblerEmit {
     this.text = finalText
     this.toolByIndex = new Map(
-      finalTools.map((t, i) => [i, { name: t.name, raw: '', input: t.input }] as [number, ToolSlot]),
+      finalTools.map((t, i) => [i, { name: t.name, id: t.id, raw: '', input: t.input }] as [number, ToolSlot]),
     )
     return this.emit(false)
   }
@@ -95,7 +97,7 @@ export class TurnAssembler {
     return {
       id: this.id,
       text: this.text,
-      toolUses: [...this.toolByIndex.values()].map((t) => ({ name: t.name, input: t.input })),
+      toolUses: [...this.toolByIndex.values()].map((t) => ({ name: t.name, id: t.id, input: t.input })),
       partial,
     }
   }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mapToAgentMessage } from '../claude-message-mapper'
+import { mapToAgentMessage, extractToolResults } from '../claude-message-mapper'
 
 describe('mapToAgentMessage', () => {
   it('maps system init to system init with sessionId + model', () => {
@@ -31,8 +31,8 @@ describe('mapToAgentMessage', () => {
       role: 'assistant',
       text: 'Looking at the file.',
       toolUses: [
-        { name: 'Read', input: { file_path: 'a.ts' } },
-        { name: 'Edit', input: { file_path: 'a.ts' } },
+        { name: 'Read', id: 'tu_1', input: { file_path: 'a.ts' } },
+        { name: 'Edit', id: 'tu_2', input: { file_path: 'a.ts' } },
       ],
     })
   })
@@ -89,5 +89,37 @@ describe('mapToAgentMessage', () => {
 
   it('returns null for user echo', () => {
     expect(mapToAgentMessage({ type: 'user' } as any)).toBeNull()
+  })
+})
+
+describe('extractToolResults', () => {
+  it('从 user 消息提取 tool_result 列表(content 归一成字符串)', () => {
+    const raw = {
+      type: 'user',
+      message: {
+        content: [
+          { type: 'tool_result', tool_use_id: 'tu-1', content: 'file contents here', is_error: false },
+          { type: 'tool_result', tool_use_id: 'tu-2', content: [{ type: 'text', text: 'multi' }], is_error: true },
+        ],
+      },
+    }
+    expect(extractToolResults(raw as any)).toEqual([
+      { toolUseId: 'tu-1', content: 'file contents here', isError: false },
+      { toolUseId: 'tu-2', content: 'multi', isError: true },
+    ])
+  })
+
+  it('非 user 消息返回空数组', () => {
+    expect(extractToolResults({ type: 'assistant' } as any)).toEqual([])
+  })
+
+  it('content 为纯字符串时原样返回', () => {
+    const raw = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu-x', content: 'plain' }] } }
+    expect(extractToolResults(raw as any)).toEqual([{ toolUseId: 'tu-x', content: 'plain', isError: false }])
+  })
+
+  it('跳过无 tool_use_id 的块', () => {
+    const raw = { type: 'user', message: { content: [{ type: 'tool_result', content: 'x' }, { type: 'text', text: 'hi' }] } }
+    expect(extractToolResults(raw as any)).toEqual([])
   })
 })

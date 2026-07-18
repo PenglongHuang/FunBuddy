@@ -2,7 +2,10 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { nanoid } from 'nanoid'
 import { ai, fs } from '@/lib/ipc'
+import { useToastStore } from './toastStore'
+import { describeSystemError } from '@/lib/normalize-error'
 import type { AgentMessage, AgentTask } from '../../../shared/agent-types'
+import { attachToolResult } from '../../../shared/tool-result-util'
 
 /**
  * 会话消息视图:按 taskId 索引的纯内存数组。运行中由 provider 流式 ingest;
@@ -124,7 +127,6 @@ export const useAgentStore = create<AgentStore>()(
           return
         }
 
-        // system.result / system.error:更新 status,并存入 _messages 以便 UI 渲染错误详情
         if (msg.role === 'system') {
           if (msg.kind === 'result') {
             t.status = msg.meta?.isError ? 'error' : 'idle'
@@ -133,9 +135,23 @@ export const useAgentStore = create<AgentStore>()(
             t.status = 'error'
             t.updatedAt = Date.now()
           }
+          // tool_result:按 toolUseId 关联到所属 assistant.toolUses[i].result。
+          // 不写入 _messages(避免成为独立消息),不弹 toast;找不到归属(如 id 不匹配)安全忽略。
+          // meta 由 claude-code.ts 恒发齐 {toolUseId,content,isError,chars,lines},一次断言即可。
+          if (msg.kind === 'tool_result') {
+            const m = msg.meta as { toolUseId: string; content: string; isError: boolean; chars: number; lines: number }
+            attachToolResult(
+              s._messages[taskId] ?? [],
+              m.toolUseId,
+              { content: m.content, isError: m.isError, chars: m.chars, lines: m.lines },
+            )
+            return
+          }
           // 仅把错误写入 _messages 供 UI 渲染;成功 result 不入库,避免逐轮堆积
           if (msg.kind === 'error' || (msg.kind === 'result' && msg.meta?.isError)) {
             s._messages[taskId] = [...(s._messages[taskId] ?? []), msg]
+            const { prefix, title } = describeSystemError(msg)
+            useToastStore.getState().show(prefix + title)
           }
           return
         }
