@@ -31,8 +31,8 @@ describe('mapToAgentMessage', () => {
       role: 'assistant',
       text: 'Looking at the file.',
       toolUses: [
-        { name: 'Read', input: { file_path: 'a.ts' } },
-        { name: 'Edit', input: { file_path: 'a.ts' } },
+        { name: 'Read', id: 'tu_1', input: { file_path: 'a.ts' } },
+        { name: 'Edit', id: 'tu_2', input: { file_path: 'a.ts' } },
       ],
     })
   })

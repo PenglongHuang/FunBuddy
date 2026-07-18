@@ -16,12 +16,12 @@ export function mapToAgentMessage(msg: SDKMessage): AgentMessage | null {
   }
 
   if (msg.type === 'assistant') {
-    const blocks = ((msg as any).message?.content ?? []) as Array<{ type: string; text?: string; name?: string; input?: unknown }>
+    const blocks = ((msg as any).message?.content ?? []) as Array<{ type: string; text?: string; name?: string; id?: string; input?: unknown }>
     let text = ''
     const toolUses: ToolUse[] = []
     for (const b of blocks) {
       if (b.type === 'text' && typeof b.text === 'string') text += b.text
-      else if (b.type === 'tool_use' && b.name) toolUses.push({ name: b.name, input: b.input })
+      else if (b.type === 'tool_use' && b.name) toolUses.push({ name: b.name, id: b.id, input: b.input })
     }
     return { role: 'assistant', text, toolUses }
   }

@@ -12,10 +12,10 @@ const textDelta = (index: number, text: string): StreamEvent => ({
   index,
   delta: { type: 'text_delta', text },
 })
-const toolStart = (index: number, name: string): StreamEvent => ({
+const toolStart = (index: number, name: string, id?: string): StreamEvent => ({
   type: 'content_block_start',
   index,
-  content_block: { type: 'tool_use', name },
+  content_block: { type: 'tool_use', name, ...(id ? { id } : {}) },
 })
 const inputDelta = (index: number, partial: string): StreamEvent => ({
   type: 'content_block_delta',
@@ -53,6 +53,15 @@ describe('TurnAssembler', () => {
     expect(e?.toolUses).toEqual([{ name: 'Read', input: { file_path: 'src/auth.ts' } }])
   })
 
+  it('tool_use 带 id 时透传到 emit', () => {
+    const a = new TurnAssembler('t1#1')
+    a.feed(msgStart())
+    a.feed(toolStart(0, 'Read', 'tu-9'))
+    a.feed(inputDelta(0, '{"file_path":"a.ts"}'))
+    const e = a.feed(blockStop(0))
+    expect(e?.toolUses).toEqual([{ name: 'Read', id: 'tu-9', input: { file_path: 'a.ts' } }])
+  })
+
   it('多工具按出现顺序保留', () => {
     const a = new TurnAssembler('t1#1')
     a.feed(msgStart())
@@ -71,11 +80,11 @@ describe('TurnAssembler', () => {
     a.feed(msgStart())
     a.feed(textStart(0))
     a.feed(textDelta(0, 'partial...'))
-    const e = a.finalize('最终完整文本', [{ name: 'Read', input: { file_path: 'a.ts' } }])
+    const e = a.finalize('最终完整文本', [{ name: 'Read', id: 'tu-1', input: { file_path: 'a.ts' } }])
     expect(e).toEqual({
       id: 't1#1',
       text: '最终完整文本',
-      toolUses: [{ name: 'Read', input: { file_path: 'a.ts' } }],
+      toolUses: [{ name: 'Read', id: 'tu-1', input: { file_path: 'a.ts' } }],
       partial: false,
     })
   })
