@@ -20,6 +20,12 @@ vi.mock('@/lib/ipc', () => ({
   },
 }))
 
+// vi.hoisted 保证 toastShow 在 vi.mock 工厂运行时就已就绪(避免顶层 const 的 TDZ)
+const toastShow = vi.hoisted(() => vi.fn())
+vi.mock('@/stores/toastStore', () => ({
+  useToastStore: { getState: () => ({ show: toastShow }) },
+}))
+
 describe('agentStore', () => {
   beforeEach(() => {
     useAgentStore.getState().reset()
@@ -279,5 +285,23 @@ describe('agentStore', () => {
     expect(fs.readFile).toHaveBeenCalledWith('agent-sessions.json')
     expect(useAgentStore.getState().migratedDropped).toBe(2)
     expect(fs.deleteFile).toHaveBeenCalledWith('agent-sessions.json')
+  })
+
+  it('ingest error 时弹归一化后的 toast(title 去掉 Error: 前缀)', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'error', meta: { error: 'Error: boom' } })
+    expect(toastShow).toHaveBeenCalledWith('⚠ boom')
+  })
+
+  it('ingest result isError 时弹归一化后的 toast', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'result', meta: { isError: true, result: 'Error: x' } })
+    expect(toastShow).toHaveBeenCalledWith('⚠ x')
+  })
+
+  it('ingest result isError 只有 subtype 时也取到并弹归一化 toast', () => {
+    const taskId = useAgentStore.getState().createTask('t', '/ws')
+    useAgentStore.getState().ingest(taskId, { role: 'system', kind: 'result', meta: { isError: true, subtype: 'Error: y' } })
+    expect(toastShow).toHaveBeenCalledWith('⚠ y')
   })
 })

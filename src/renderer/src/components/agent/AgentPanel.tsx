@@ -6,6 +6,7 @@ import { useAgentStore } from '@/stores/agentStore'
 import { useToastStore } from '@/stores/toastStore'
 import { aiEvents, ai, dialog, fs } from '@/lib/ipc'
 import { summarizeToolInput } from '@/lib/tool-input-summary'
+import { normalizeErrorMessage } from '@/lib/normalize-error'
 import type { AgentMessage, AgentTask, AgentTaskStatus, ProviderInfo } from '../../../../shared/agent-types'
 
 const TOOL_ICON: Record<string, string> = {
@@ -19,9 +20,6 @@ const STATUS_META: Record<AgentTaskStatus, { dot: string; label: string; color: 
   error: { dot: '●', label: '出错', color: '#FF453a' },
   stopped: { dot: '○', label: '已停止', color: 'rgba(255,255,255,0.4)' },
 }
-
-/** 系统级错误横幅的共享样式(kind==='error' 与 result+isError 复用)。 */
-const SYSTEM_ERROR_STYLE = { alignSelf: 'center', fontSize: 11, color: '#FF453a' } as const
 
 const INPUT_LINE_HEIGHT = 22
 const INPUT_MAX_LINES = 6
@@ -69,6 +67,20 @@ function ToolPills({ toolUses }: { toolUses: { name: string; input?: unknown }[]
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/** 错误卡片:归一化标题 + 可折叠原文 + 复制错误。error 与 result+isError 复用。 */
+function ErrorCard({ prefix, title, detail, raw }: { prefix: string; title: string; detail: string; raw: string }) {
+  return (
+    <div style={{ alignSelf: 'center', maxWidth: '88%', background: 'rgba(255,69,58,0.08)', border: '1px solid rgba(255,69,58,0.3)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#FF453a' }}>
+      <div role="alert">{prefix}{title}</div>
+      {detail && <div style={{ color: 'rgba(255,69,58,0.7)', fontSize: 11, marginTop: 4, whiteSpace: 'pre-wrap', maxHeight: 80, overflowY: 'auto' }}>{detail}</div>}
+      <button
+        onClick={() => { navigator.clipboard?.writeText(raw); useToastStore.getState().show('已复制错误信息') }}
+        style={{ marginTop: 6, fontSize: 11, color: '#FF453a', background: 'transparent', border: '1px solid rgba(255,69,58,0.4)', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}
+      >复制错误</button>
     </div>
   )
 }
@@ -375,13 +387,15 @@ claude   # 登录`}
             }
             // system
             if (m.kind === 'error') {
-              const error = (m.meta as { error?: string })?.error
-              return <div key={i} style={SYSTEM_ERROR_STYLE}>⚠ 出错了{error ? `: ${error}` : ''}</div>
+              const raw = String((m.meta as { error?: string })?.error ?? '')
+              const { title, detail } = normalizeErrorMessage(raw)
+              return <ErrorCard key={i} prefix="⚠ " title={title} detail={detail} raw={raw} />
             }
             if (m.kind === 'result' && (m.meta as { isError?: boolean })?.isError) {
               const meta = m.meta as { result?: string; subtype?: string }
-              const detail = meta.result || meta.subtype
-              return <div key={i} style={SYSTEM_ERROR_STYLE}>⚠ 任务执行出错{detail ? `: ${detail}` : ''}</div>
+              const raw = String(meta.result || meta.subtype || '')
+              const { title, detail } = normalizeErrorMessage(raw)
+              return <ErrorCard key={i} prefix="⚠ 任务执行出错：" title={title} detail={detail} raw={raw} />
             }
             return null
           })}

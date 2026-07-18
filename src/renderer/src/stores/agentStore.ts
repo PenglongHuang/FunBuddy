@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { nanoid } from 'nanoid'
 import { ai, fs } from '@/lib/ipc'
+import { useToastStore } from './toastStore'
+import { normalizeErrorMessage } from '@/lib/normalize-error'
 import type { AgentMessage, AgentTask } from '../../../shared/agent-types'
 
 /**
@@ -124,7 +126,6 @@ export const useAgentStore = create<AgentStore>()(
           return
         }
 
-        // system.result / system.error:更新 status,并存入 _messages 以便 UI 渲染错误详情
         if (msg.role === 'system') {
           if (msg.kind === 'result') {
             t.status = msg.meta?.isError ? 'error' : 'idle'
@@ -136,6 +137,11 @@ export const useAgentStore = create<AgentStore>()(
           // 仅把错误写入 _messages 供 UI 渲染;成功 result 不入库,避免逐轮堆积
           if (msg.kind === 'error' || (msg.kind === 'result' && msg.meta?.isError)) {
             s._messages[taskId] = [...(s._messages[taskId] ?? []), msg]
+            const raw =
+              msg.kind === 'error'
+                ? String((msg.meta as { error?: string })?.error ?? '')
+                : String((msg.meta as { result?: string })?.result ?? (msg.meta as { subtype?: string })?.subtype ?? '')
+            useToastStore.getState().show('⚠ ' + normalizeErrorMessage(raw).title)
           }
           return
         }
