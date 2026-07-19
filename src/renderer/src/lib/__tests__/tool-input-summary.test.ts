@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { summarizeToolInput, summarizeToolResult } from '../tool-input-summary'
+import { summarizeToolInput, summarizeToolResult, toolStatus } from '../tool-input-summary'
 import type { ToolResult } from '../../../../shared/agent-types'
 
 describe('summarizeToolInput', () => {
@@ -66,5 +66,21 @@ describe('summarizeToolResult', () => {
   })
   it('失败但空:✗ 执行失败', () => {
     expect(summarizeToolResult({ content: '', isError: true, chars: 0, lines: 0 })).toBe('✗ 执行失败')
+  })
+})
+
+describe('toolStatus', () => {
+  it('无 result 时为 pending', () => {
+    expect(toolStatus({})).toBe('pending')
+    expect(toolStatus({ result: undefined })).toBe('pending')
+    expect(toolStatus({ result: null })).toBe('pending')
+  })
+
+  it('result 成功时为 success', () => {
+    expect(toolStatus({ result: { isError: false } })).toBe('success')
+  })
+
+  it('result 出错时为 error', () => {
+    expect(toolStatus({ result: { isError: true } })).toBe('error')
   })
 })

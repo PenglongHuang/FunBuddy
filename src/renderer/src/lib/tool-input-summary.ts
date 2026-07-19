@@ -74,3 +74,15 @@ function formatChars(n: number): string {
   if (n < 1000000) return `${(n / 1000).toFixed(1)}K`
   return `${(n / 1000000).toFixed(1)}M`
 }
+
+/** 工具调用的展示状态:无结果=进行中,有结果按是否出错。用于纵向列表的状态点。 */
+export type ToolStatus = 'pending' | 'success' | 'error'
+
+/**
+ * 判定工具调用的展示状态。参数放宽为结构类型(只看 result.isError),
+ * 既兼容 ToolUse,又便于单测构造,不硬依赖完整 ToolUse 形状。
+ */
+export function toolStatus(t: { result?: { isError?: boolean } | null }): ToolStatus {
+  if (!t.result) return 'pending'
+  return t.result.isError ? 'error' : 'success'
+}
