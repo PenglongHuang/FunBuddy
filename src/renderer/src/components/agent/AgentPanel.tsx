@@ -5,13 +5,19 @@ import MarkdownPreview from '@/components/common/MarkdownPreview'
 import { useAgentStore } from '@/stores/agentStore'
 import { useToastStore } from '@/stores/toastStore'
 import { aiEvents, ai, dialog, fs } from '@/lib/ipc'
-import { summarizeToolInput, summarizeToolResult } from '@/lib/tool-input-summary'
+import { summarizeToolInput, summarizeToolResult, toolStatus, type ToolStatus } from '@/lib/tool-input-summary'
 import { describeSystemError } from '@/lib/normalize-error'
 import type { AgentMessage, AgentTask, AgentTaskStatus, ProviderInfo, ToolUse } from '../../../../shared/agent-types'
 
 const TOOL_ICON: Record<string, string> = {
   Read: '📖', Write: '📝', Edit: '✏️', Bash: '💻', Glob: '🔍', Grep: '🔎',
   WebSearch: '🌐', WebFetch: '🔗', Task: '🤖', Agent: '🤖',
+}
+
+const STATUS_DOT: Record<ToolStatus, { icon: string; color: string; label: string }> = {
+  pending: { icon: '⏳', color: 'rgba(255,255,255,0.5)', label: '进行中' },
+  success: { icon: '✅', color: '#30D158', label: '成功' },
+  error: { icon: '❌', color: '#FF453a', label: '出错' },
 }
 
 const STATUS_META: Record<AgentTaskStatus, { dot: string; label: string; color: string }> = {
@@ -43,8 +49,10 @@ function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
   const [expanded, setExpanded] = useState<number | null>(null)
   if (toolUses.length === 0) return null
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '6px 0' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: '6px 0' }}>
       {toolUses.map((t, i) => {
+        const status = toolStatus(t)
+        const dot = STATUS_DOT[status]
         const summary = summarizeToolInput(t.name, t.input)
         const isEdit = t.name === 'Edit' || t.name === 'Write'
         const isOpen = expanded === i
@@ -52,26 +60,27 @@ function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
         const result = t.result
         const canExpand = hasInput || !!result
         const resultLine = result ? summarizeToolResult(result) : ''
-        const resultColor = result?.isError ? '#FF453a' : '#30D158'
         return (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, maxWidth: '100%' }}>
-            <span
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div
               onClick={canExpand ? () => setExpanded(isOpen ? null : i) : undefined}
               style={{
-                fontSize: 11, padding: '3px 9px', borderRadius: 11,
+                display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: 11.5, padding: '4px 8px', borderRadius: 7,
                 cursor: canExpand ? 'pointer' : 'default',
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                background: isEdit ? 'rgba(255,159,10,0.1)' : 'rgba(255,255,255,0.06)',
-                border: `1px solid ${isEdit ? 'rgba(255,159,10,0.3)' : 'rgba(255,255,255,0.1)'}`,
-                color: isEdit ? '#FF9F0A' : 'rgba(255,255,255,0.7)',
+                background: isEdit ? 'rgba(255,159,10,0.08)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${isEdit ? 'rgba(255,159,10,0.25)' : 'rgba(255,255,255,0.08)'}`,
               }}
             >
-              <span>{TOOL_ICON[t.name] ?? '🔧'} {t.name}{summary ? ` · ${summary}` : ''}</span>
-              {resultLine && <span style={{ color: resultColor }}>{resultLine}</span>}
+              <span style={{ color: dot.color, fontSize: 11, flexShrink: 0 }} title={dot.label}>{dot.icon}</span>
+              <span style={{ color: 'rgba(255,255,255,0.75)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {TOOL_ICON[t.name] ?? '🔧'} {t.name}{summary ? ` · ${summary}` : ''}
+              </span>
+              {resultLine && <span style={{ color: dot.color, flexShrink: 0 }}>{resultLine}</span>}
               {canExpand && (
                 <ChevronRight size={11} style={{ flexShrink: 0, opacity: 0.55, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s ease' }} />
               )}
-            </span>
+            </div>
             {isOpen && canExpand && (
               <div style={{ width: '100%', maxWidth: 460, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {hasInput && (
@@ -83,7 +92,7 @@ function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
                 {result && (
                   <div>
                     <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 2, display: 'flex', justifyContent: 'space-between' }}>
-                      <span>输出 <span style={{ color: resultColor }}>{result.isError ? '✗' : '✓'}</span></span>
+                      <span>输出 <span style={{ color: dot.color }}>{result.isError ? '✗' : '✓'}</span></span>
                       <span style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.6)' }} onClick={() => copyText(result.content).then((ok) => useToastStore.getState().show(ok ? '已复制输出' : '复制失败'))}>复制</span>
                     </div>
                     <pre style={{ ...PRE_STYLE, maxHeight: 240, overflowY: 'auto' }}>{result.content || '(空)'}</pre>
