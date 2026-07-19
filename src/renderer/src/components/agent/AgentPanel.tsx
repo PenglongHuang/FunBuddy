@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { PanelLeft, ChevronRight } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
@@ -33,6 +33,9 @@ const INPUT_LINE_HEIGHT = 22
 const INPUT_MAX_LINES = 6
 const INPUT_PAD_Y = 18
 const INPUT_MAX_HEIGHT = INPUT_MAX_LINES * INPUT_LINE_HEIGHT + INPUT_PAD_Y
+
+/** 防御性 memo:真正挡历史消息重渲的是 MessageItem.memo(m 引用稳定→整个消息项跳过);这里再包一层,确保 MessageItem 万一重渲时 MarkdownPreview 仍按 content 跳过重解析。 */
+const MemoMarkdown = memo(MarkdownPreview)
 
 /** 复制到剪贴板,返回是否成功。clipboard 不可用或写入 reject 都返回 false,避免谎报"已复制"。 */
 async function copyText(text: string): Promise<boolean> {
@@ -106,6 +109,41 @@ function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
     </div>
   )
 }
+
+/**
+ * 单条消息渲染。memo 化:store 每次 partial upsert 只换当前那条消息对象引用,
+ * 历史消息引用稳定 → 跳过重渲(含其 MarkdownPreview),消除 O(N) reconcile。
+ * key 用列表索引:单会话内只追加/末尾 upsert(不中间插删);loadHistory 前置合并仅切会话时跑一次,整体替换为新数组,key 空间重置,不影响稳定。
+ */
+const MessageItem = memo(function MessageItem({ m }: { m: AgentMessage }) {
+  if (m.role === 'user') {
+    return (
+      <div style={{ alignSelf: 'flex-end', maxWidth: '75%', background: 'rgba(10,132,255,0.18)', border: '1px solid rgba(10,132,255,0.3)', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', fontSize: 12.5, lineHeight: 1.5 }}>
+        {m.text}
+      </div>
+    )
+  }
+  if (m.role === 'assistant') {
+    const streaming = (m as { partial?: boolean }).partial
+    return (
+      <div style={{ alignSelf: 'flex-start', maxWidth: '88%', display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {m.text && (
+          <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+            <MemoMarkdown content={m.text} linkTarget="_blank" streaming={streaming} />
+            {streaming && <span className="fb-cursor">▋</span>}
+          </div>
+        )}
+        <ToolPills toolUses={m.toolUses} />
+      </div>
+    )
+  }
+  // system:error 与 result+isError 都走 describeSystemError
+  if (m.kind === 'error' || (m.kind === 'result' && (m.meta as { isError?: boolean })?.isError)) {
+    const { prefix, title, detail, raw } = describeSystemError(m)
+    return <ErrorCard prefix={prefix} title={title} detail={detail} raw={raw} />
+  }
+  return null
+})
 
 /** 错误卡片:归一化标题 + 可折叠原文 + 复制错误。error 与 result+isError 复用。 */
 function ErrorCard({ prefix, title, detail, raw }: { prefix: string; title: string; detail: string; raw: string }) {
@@ -399,35 +437,9 @@ claude   # 登录`}
               点左侧"新会话"或直接输入消息开始
             </div>
           )}
-          {activeMessages.map((m, i) => {
-            if (m.role === 'user') {
-              return (
-                <div key={i} style={{ alignSelf: 'flex-end', maxWidth: '75%', background: 'rgba(10,132,255,0.18)', border: '1px solid rgba(10,132,255,0.3)', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', fontSize: 12.5, lineHeight: 1.5 }}>
-                  {m.text}
-                </div>
-              )
-            }
-            if (m.role === 'assistant') {
-              const streaming = (m as { partial?: boolean }).partial
-              return (
-                <div key={i} style={{ alignSelf: 'flex-start', maxWidth: '88%', display: 'flex', flexDirection: 'column', gap: 0 }}>
-                  {m.text && (
-                    <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>
-                      <MarkdownPreview content={m.text} linkTarget="_blank" streaming={streaming} />
-                      {streaming && <span className="fb-cursor">▋</span>}
-                    </div>
-                  )}
-                  <ToolPills toolUses={m.toolUses} />
-                </div>
-              )
-            }
-            // system:error 与 result+isError 都走 describeSystemError,卡片与 toast 共用 prefix/title。
-            if (m.kind === 'error' || (m.kind === 'result' && (m.meta as { isError?: boolean })?.isError)) {
-              const { prefix, title, detail, raw } = describeSystemError(m)
-              return <ErrorCard key={i} prefix={prefix} title={title} detail={detail} raw={raw} />
-            }
-            return null
-          })}
+          {activeMessages.map((m, i) => (
+            <MessageItem key={i} m={m} />
+          ))}
           {showThinking && (
             <div style={{ alignSelf: 'flex-start', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
               思考中
