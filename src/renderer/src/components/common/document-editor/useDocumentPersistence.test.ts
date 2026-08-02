@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  DocumentPersistenceCoordinator,
   persistDocumentContent,
-  selectDocumentOptions,
-  shouldClearDirtyAfterSave,
 } from './useDocumentPersistence'
 
 describe('persistDocumentContent', () => {
@@ -65,52 +64,78 @@ describe('persistDocumentContent', () => {
   })
 })
 
-describe('selectDocumentOptions', () => {
-  it('selects cleanup callbacks and title for the document being cleaned up', () => {
-    const previousDocument = {
-      documentTitle: 'Previous',
-      saveContent: vi.fn(),
-      updateTitle: vi.fn(),
-    }
-    const nextDocument = {
-      documentTitle: 'Next',
-      saveContent: vi.fn(),
-      updateTitle: vi.fn(),
-    }
-    const optionsByDocumentId = new Map([
-      ['previous', previousDocument],
-      ['next', nextDocument],
-    ])
+function createOptions(documentId: string, saveContent = vi.fn().mockResolvedValue(undefined)) {
+  return {
+    documentId,
+    documentTitle: documentId,
+    loadContent: vi.fn().mockResolvedValue(''),
+    saveContent,
+    updateTitle: vi.fn().mockResolvedValue(undefined),
+    showToast: vi.fn(),
+  }
+}
 
-    expect(selectDocumentOptions(optionsByDocumentId, 'previous')).toBe(previousDocument)
-  })
-})
+describe('DocumentPersistenceCoordinator', () => {
+  it('keeps a loading document empty when another dirty document is cleaned up', async () => {
+    const coordinator = new DocumentPersistenceCoordinator()
+    const saveA = vi.fn().mockResolvedValue(undefined)
+    const saveB = vi.fn().mockResolvedValue(undefined)
+    const sessionA = coordinator.activate(createOptions('a', saveA))
 
-describe('shouldClearDirtyAfterSave', () => {
-  it('keeps dirty state when an edit happens while a save is in flight', () => {
-    expect(shouldClearDirtyAfterSave({
-      savedDocumentId: 'document-a',
-      currentDocumentId: 'document-a',
-      savedGeneration: 3,
-      currentGeneration: 4,
-    })).toBe(false)
-  })
+    coordinator.change(sessionA, '# A\n\nDirty content')
+    const sessionB = coordinator.activate(createOptions('b', saveB))
+    const sessionC = coordinator.activate(createOptions('c'))
 
-  it('keeps dirty state when the active document changes while a save is in flight', () => {
-    expect(shouldClearDirtyAfterSave({
-      savedDocumentId: 'document-a',
-      currentDocumentId: 'document-b',
-      savedGeneration: 3,
-      currentGeneration: 3,
-    })).toBe(false)
+    await coordinator.save(sessionA)
+
+    expect(coordinator.snapshot(sessionB)).toMatchObject({ content: '', dirty: false })
+    expect(coordinator.snapshot(sessionC)).toMatchObject({ content: '', dirty: false })
+    expect(saveA).toHaveBeenCalledWith('# A\n\nDirty content')
+    expect(saveB).not.toHaveBeenCalled()
   })
 
-  it('clears dirty state only for the saved document and edit generation', () => {
-    expect(shouldClearDirtyAfterSave({
-      savedDocumentId: 'document-a',
-      currentDocumentId: 'document-a',
-      savedGeneration: 3,
-      currentGeneration: 3,
-    })).toBe(true)
+  it('serializes overlapping saves and persists the newest content last', async () => {
+    let settleFirstSave!: () => void
+    const firstSave = new Promise<void>((resolve) => { settleFirstSave = resolve })
+    const saveContent = vi.fn()
+      .mockReturnValueOnce(firstSave)
+      .mockResolvedValueOnce(undefined)
+    const coordinator = new DocumentPersistenceCoordinator()
+    const session = coordinator.activate(createOptions('a', saveContent))
+
+    coordinator.change(session, 'A')
+    const savingA = coordinator.save(session)
+    coordinator.change(session, 'B')
+    const savingB = coordinator.save(session)
+
+    expect(saveContent).toHaveBeenCalledTimes(1)
+    expect(saveContent).toHaveBeenLastCalledWith('A')
+
+    settleFirstSave()
+    await savingA
+    await savingB
+
+    expect(saveContent).toHaveBeenNthCalledWith(2, 'B')
+    expect(coordinator.snapshot(session)).toMatchObject({ content: 'B', dirty: false })
+  })
+
+  it('continues queued saves after a save failure', async () => {
+    const saveContent = vi.fn()
+      .mockRejectedValueOnce(new Error('first save failed'))
+      .mockResolvedValueOnce(undefined)
+    const coordinator = new DocumentPersistenceCoordinator()
+    const session = coordinator.activate(createOptions('a', saveContent))
+
+    coordinator.change(session, 'A')
+    const failedSave = coordinator.save(session)
+    coordinator.change(session, 'B')
+    const retrySave = coordinator.save(session)
+
+    await expect(failedSave).rejects.toThrow('first save failed')
+    await retrySave
+
+    expect(saveContent).toHaveBeenNthCalledWith(1, 'A')
+    expect(saveContent).toHaveBeenNthCalledWith(2, 'B')
+    expect(coordinator.snapshot(session)).toMatchObject({ content: 'B', dirty: false })
   })
 })
