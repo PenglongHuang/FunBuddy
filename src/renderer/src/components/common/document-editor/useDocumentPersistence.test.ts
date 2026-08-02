@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { persistDocumentContent } from './useDocumentPersistence'
+import {
+  persistDocumentContent,
+  selectDocumentOptions,
+  shouldClearDirtyAfterSave,
+} from './useDocumentPersistence'
 
 describe('persistDocumentContent', () => {
   it('saves content and updates the title from a changed first H1', async () => {
@@ -58,5 +62,55 @@ describe('persistDocumentContent', () => {
     })).rejects.toThrow(error)
 
     expect(updateTitle).not.toHaveBeenCalled()
+  })
+})
+
+describe('selectDocumentOptions', () => {
+  it('selects cleanup callbacks and title for the document being cleaned up', () => {
+    const previousDocument = {
+      documentTitle: 'Previous',
+      saveContent: vi.fn(),
+      updateTitle: vi.fn(),
+    }
+    const nextDocument = {
+      documentTitle: 'Next',
+      saveContent: vi.fn(),
+      updateTitle: vi.fn(),
+    }
+    const optionsByDocumentId = new Map([
+      ['previous', previousDocument],
+      ['next', nextDocument],
+    ])
+
+    expect(selectDocumentOptions(optionsByDocumentId, 'previous')).toBe(previousDocument)
+  })
+})
+
+describe('shouldClearDirtyAfterSave', () => {
+  it('keeps dirty state when an edit happens while a save is in flight', () => {
+    expect(shouldClearDirtyAfterSave({
+      savedDocumentId: 'document-a',
+      currentDocumentId: 'document-a',
+      savedGeneration: 3,
+      currentGeneration: 4,
+    })).toBe(false)
+  })
+
+  it('keeps dirty state when the active document changes while a save is in flight', () => {
+    expect(shouldClearDirtyAfterSave({
+      savedDocumentId: 'document-a',
+      currentDocumentId: 'document-b',
+      savedGeneration: 3,
+      currentGeneration: 3,
+    })).toBe(false)
+  })
+
+  it('clears dirty state only for the saved document and edit generation', () => {
+    expect(shouldClearDirtyAfterSave({
+      savedDocumentId: 'document-a',
+      currentDocumentId: 'document-a',
+      savedGeneration: 3,
+      currentGeneration: 3,
+    })).toBe(true)
   })
 })

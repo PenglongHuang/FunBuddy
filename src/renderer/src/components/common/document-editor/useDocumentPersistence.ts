@@ -17,6 +17,27 @@ interface PersistDocumentContentOptions {
   updateTitle: (title: string) => Promise<void>
 }
 
+export function selectDocumentOptions<T>(
+  optionsByDocumentId: ReadonlyMap<string, T>,
+  documentId: string,
+): T | undefined {
+  return optionsByDocumentId.get(documentId)
+}
+
+export function shouldClearDirtyAfterSave({
+  savedDocumentId,
+  currentDocumentId,
+  savedGeneration,
+  currentGeneration,
+}: {
+  savedDocumentId: string
+  currentDocumentId: string
+  savedGeneration: number
+  currentGeneration: number
+}): boolean {
+  return savedDocumentId === currentDocumentId && savedGeneration === currentGeneration
+}
+
 export async function persistDocumentContent({
   content,
   documentTitle,
@@ -44,10 +65,13 @@ export function useDocumentPersistence(options: UseDocumentPersistenceOptions): 
   const contentRef = useRef(content)
   const dirtyRef = useRef(dirty)
   const optionsRef = useRef(options)
+  const optionsByDocumentIdRef = useRef(new Map<string, UseDocumentPersistenceOptions>())
+  const editGenerationRef = useRef(0)
 
   contentRef.current = content
   dirtyRef.current = dirty
   optionsRef.current = options
+  optionsByDocumentIdRef.current.set(options.documentId, options)
 
   useEffect(() => {
     let active = true
@@ -57,6 +81,7 @@ export function useDocumentPersistence(options: UseDocumentPersistenceOptions): 
         if (!active) return
         contentRef.current = loadedContent
         dirtyRef.current = false
+        editGenerationRef.current += 1
         setContent(loadedContent)
         setDirty(false)
       })
@@ -69,16 +94,26 @@ export function useDocumentPersistence(options: UseDocumentPersistenceOptions): 
 
   const save = useCallback(async () => {
     const currentOptions = optionsRef.current
+    const savedContent = contentRef.current
+    const savedDocumentId = currentOptions.documentId
+    const savedGeneration = editGenerationRef.current
 
     try {
       await persistDocumentContent({
-        content: contentRef.current,
+        content: savedContent,
         documentTitle: currentOptions.documentTitle,
         saveContent: currentOptions.saveContent,
         updateTitle: currentOptions.updateTitle,
       })
-      dirtyRef.current = false
-      setDirty(false)
+      if (shouldClearDirtyAfterSave({
+        savedDocumentId,
+        currentDocumentId: optionsRef.current.documentId,
+        savedGeneration,
+        currentGeneration: editGenerationRef.current,
+      })) {
+        dirtyRef.current = false
+        setDirty(false)
+      }
       currentOptions.showToast('淇濆瓨鎴愬姛')
     } catch {
       currentOptions.showToast('淇濆瓨澶辫触')
@@ -101,15 +136,18 @@ export function useDocumentPersistence(options: UseDocumentPersistenceOptions): 
   }, [])
 
   useEffect(() => {
-    return () => {
-      if (!dirtyRef.current) return
+    const cleanupDocumentId = options.documentId
 
-      const currentOptions = optionsRef.current
+    return () => {
+      const cleanupOptions = selectDocumentOptions(optionsByDocumentIdRef.current, cleanupDocumentId)
+      optionsByDocumentIdRef.current.delete(cleanupDocumentId)
+      if (!dirtyRef.current || !cleanupOptions) return
+
       void persistDocumentContent({
         content: contentRef.current,
-        documentTitle: currentOptions.documentTitle,
-        saveContent: currentOptions.saveContent,
-        updateTitle: currentOptions.updateTitle,
+        documentTitle: cleanupOptions.documentTitle,
+        saveContent: cleanupOptions.saveContent,
+        updateTitle: cleanupOptions.updateTitle,
       }).catch(() => undefined)
     }
   }, [options.documentId])
@@ -117,6 +155,7 @@ export function useDocumentPersistence(options: UseDocumentPersistenceOptions): 
   const handleChange = useCallback((nextContent: string) => {
     contentRef.current = nextContent
     dirtyRef.current = true
+    editGenerationRef.current += 1
     setContent(nextContent)
     setDirty(true)
   }, [])
