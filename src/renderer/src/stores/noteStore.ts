@@ -17,7 +17,6 @@ interface NoteStore {
   sortBy: 'time' | 'name'
   viewMode: 'card' | 'compact'
   editorMode: 'live' | 'edit' | 'preview'
-  tocMaxLevel: number
   load: () => Promise<void>
   createNote: (title: string, content?: string, tags?: string[]) => Promise<Note>
   deleteNote: (id: string) => Promise<void>
@@ -33,7 +32,6 @@ interface NoteStore {
   setSortBy: (sort: 'time' | 'name') => void
   setViewMode: (mode: 'card' | 'compact') => void
   setEditorMode: (mode: 'live' | 'edit' | 'preview') => void
-  setTocMaxLevel: (level: number) => void
   openTab: (id: string) => void
   closeTab: (id: string) => void
   switchTab: (id: string) => void
@@ -54,7 +52,6 @@ export const useNoteStore = create<NoteStore>()(
     sortBy: 'time',
     viewMode: 'card',
     editorMode: 'edit' as const,
-    tocMaxLevel: 3,
 
     load: async () => {
       try {
@@ -72,7 +69,6 @@ export const useNoteStore = create<NoteStore>()(
           sortBy: string
           viewMode: string
           editorMode?: string
-          tocMaxLevel?: number
           tabs?: { id: string; title: string; pinned: boolean }[]
           activeTabId?: string | null
         }>('notePrefs')
@@ -91,7 +87,6 @@ export const useNoteStore = create<NoteStore>()(
             sortBy: (prefs.sortBy as any) ?? 'time',
             viewMode: (prefs.viewMode as any) ?? 'card',
             editorMode: (prefs.editorMode as 'live' | 'edit' | 'preview') ?? 'edit',
-            tocMaxLevel: prefs.tocMaxLevel ?? 3,
             tabs: refreshedTabs,
             activeTabId: validActiveTabId,
             activeNoteId: validActiveTabId,
@@ -349,10 +344,6 @@ export const useNoteStore = create<NoteStore>()(
       persistNotePrefs(get)
     },
 
-    setTocMaxLevel: (level) => {
-      set({ tocMaxLevel: Math.max(1, Math.min(6, level)) })
-      persistNotePrefs(get)
-    },
   }))
 )
 
@@ -361,7 +352,6 @@ function persistNotePrefs(get: () => NoteStore) {
     sortBy: get().sortBy,
     viewMode: get().viewMode,
     editorMode: get().editorMode,
-    tocMaxLevel: get().tocMaxLevel,
     tabs: get().tabs,
     activeTabId: get().activeTabId,
   })

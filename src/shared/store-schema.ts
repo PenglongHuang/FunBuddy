@@ -13,6 +13,7 @@ export interface StoreSchema {
       quickCaptureHotkey: string
       maxTabsPerPanel: number
       navHistoryLimit: number
+      tocMaxLevel: number
     }
     /** Coding Agent 绑定(目前仅 'claude-code',后续可扩展) */
     ai: {
@@ -43,7 +44,7 @@ export const storeDefaults: StoreSchema = {
   settings: {
     storageDir: '',
     pomodoro: { focusDuration: 25, shortBreak: 5, longBreak: 15, roundsBeforeLongBreak: 4 },
-    app: { autoStart: false, closeToTray: true, quickCaptureHotkey: 'Ctrl+Shift+N', maxTabsPerPanel: 20, navHistoryLimit: 100 },
+    app: { autoStart: false, closeToTray: true, quickCaptureHotkey: 'Ctrl+Shift+N', maxTabsPerPanel: 20, navHistoryLimit: 100, tocMaxLevel: 3 },
     ai: { provider: 'claude-code' },
     storageDirHistory: [],
   },

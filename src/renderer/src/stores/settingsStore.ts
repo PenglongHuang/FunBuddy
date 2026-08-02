@@ -15,6 +15,7 @@ interface AppSettings {
   quickCaptureHotkey: string
   maxTabsPerPanel: number
   navHistoryLimit: number
+  tocMaxLevel: number
 }
 
 interface SettingsState {
@@ -34,25 +35,31 @@ export const useSettingsStore = create<SettingsState>()(
     storageDir: '',
     storageDirHistory: [],
     pomodoro: { focusDuration: 25, shortBreak: 5, longBreak: 15, roundsBeforeLongBreak: 4 },
-    app: { autoStart: false, closeToTray: true, quickCaptureHotkey: 'Ctrl+Shift+N', maxTabsPerPanel: 20, navHistoryLimit: 100 },
+    app: { autoStart: false, closeToTray: true, quickCaptureHotkey: 'Ctrl+Shift+N', maxTabsPerPanel: 20, navHistoryLimit: 100, tocMaxLevel: 3 },
     loaded: false,
 
     load: async () => {
       const settings = await store.get<{
-        storageDir: string
-        storageDirHistory: string[]
-        pomodoro: PomodoroSettings
-        app: AppSettings
+        storageDir?: string
+        storageDirHistory?: string[]
+        pomodoro?: Partial<PomodoroSettings>
+        app?: Partial<AppSettings>
       }>('settings')
-      if (settings) {
-        set((s) => {
+      const legacyNotePrefs = await store.get<{ tocMaxLevel?: number }>('notePrefs')
+      const tocMaxLevel = settings?.app?.tocMaxLevel ?? legacyNotePrefs?.tocMaxLevel ?? 3
+      set((s) => {
+        if (settings) {
           s.storageDir = settings.storageDir || s.storageDir
           s.storageDirHistory = settings.storageDirHistory || []
           if (settings.pomodoro) Object.assign(s.pomodoro, settings.pomodoro)
           if (settings.app) Object.assign(s.app, settings.app)
-        })
+        }
+        s.app.tocMaxLevel = Math.max(1, Math.min(6, tocMaxLevel))
+        s.loaded = true
+      })
+      if (settings?.app?.tocMaxLevel === undefined) {
+        await store.set('settings.app', get().app)
       }
-      set({ loaded: true })
     },
 
     setStorageDir: async (dir) => {

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useNoteStore } from '@/stores/noteStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import MarkdownEditor from '@/components/common/MarkdownEditor'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
@@ -60,7 +61,7 @@ export default function NoteEditor() {
 
   const allTags = useMemo(() => getAllTags(notes), [notes])
 
-  const tocMaxLevel = useNoteStore((s) => s.tocMaxLevel)
+  const tocMaxLevel = useSettingsStore((s) => s.app.tocMaxLevel)
 
   const [content, setContent] = useState('')
   const [mode, setMode] = useState<'live' | 'edit' | 'preview'>(
