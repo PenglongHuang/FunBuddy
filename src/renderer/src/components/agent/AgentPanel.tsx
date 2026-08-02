@@ -1,17 +1,23 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { PanelLeft, ChevronRight } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import MarkdownPreview from '@/components/common/MarkdownPreview'
 import { useAgentStore } from '@/stores/agentStore'
 import { useToastStore } from '@/stores/toastStore'
 import { aiEvents, ai, dialog, fs } from '@/lib/ipc'
-import { summarizeToolInput, summarizeToolResult } from '@/lib/tool-input-summary'
+import { summarizeToolInput, toolStatus, type ToolStatus } from '@/lib/tool-input-summary'
 import { describeSystemError } from '@/lib/normalize-error'
 import type { AgentMessage, AgentTask, AgentTaskStatus, ProviderInfo, ToolUse } from '../../../../shared/agent-types'
 
 const TOOL_ICON: Record<string, string> = {
   Read: '📖', Write: '📝', Edit: '✏️', Bash: '💻', Glob: '🔍', Grep: '🔎',
   WebSearch: '🌐', WebFetch: '🔗', Task: '🤖', Agent: '🤖',
+}
+
+const STATUS_DOT: Record<ToolStatus, { icon: string; color: string; label: string }> = {
+  pending: { icon: '⏳', color: 'rgba(255,255,255,0.5)', label: '进行中' },
+  success: { icon: '✅', color: '#30D158', label: '成功' },
+  error: { icon: '❌', color: '#FF453a', label: '出错' },
 }
 
 const STATUS_META: Record<AgentTaskStatus, { dot: string; label: string; color: string }> = {
@@ -28,6 +34,9 @@ const INPUT_MAX_LINES = 6
 const INPUT_PAD_Y = 18
 const INPUT_MAX_HEIGHT = INPUT_MAX_LINES * INPUT_LINE_HEIGHT + INPUT_PAD_Y
 
+/** 防御性 memo:真正挡历史消息重渲的是 MessageItem.memo(m 引用稳定→整个消息项跳过);这里再包一层,确保 MessageItem 万一重渲时 MarkdownPreview 仍按 content 跳过重解析。 */
+const MemoMarkdown = memo(MarkdownPreview)
+
 /** 复制到剪贴板,返回是否成功。clipboard 不可用或写入 reject 都返回 false,避免谎报"已复制"。 */
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -43,35 +52,36 @@ function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
   const [expanded, setExpanded] = useState<number | null>(null)
   if (toolUses.length === 0) return null
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '6px 0' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: '6px 0' }}>
       {toolUses.map((t, i) => {
+        const status = toolStatus(t)
+        const dot = STATUS_DOT[status]
         const summary = summarizeToolInput(t.name, t.input)
         const isEdit = t.name === 'Edit' || t.name === 'Write'
         const isOpen = expanded === i
         const hasInput = t.input != null
         const result = t.result
         const canExpand = hasInput || !!result
-        const resultLine = result ? summarizeToolResult(result) : ''
-        const resultColor = result?.isError ? '#FF453a' : '#30D158'
         return (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, maxWidth: '100%' }}>
-            <span
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div
               onClick={canExpand ? () => setExpanded(isOpen ? null : i) : undefined}
               style={{
-                fontSize: 11, padding: '3px 9px', borderRadius: 11,
+                display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: 11.5, padding: '4px 8px', borderRadius: 7,
                 cursor: canExpand ? 'pointer' : 'default',
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                background: isEdit ? 'rgba(255,159,10,0.1)' : 'rgba(255,255,255,0.06)',
-                border: `1px solid ${isEdit ? 'rgba(255,159,10,0.3)' : 'rgba(255,255,255,0.1)'}`,
-                color: isEdit ? '#FF9F0A' : 'rgba(255,255,255,0.7)',
+                background: isEdit ? 'rgba(255,159,10,0.08)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${isEdit ? 'rgba(255,159,10,0.25)' : 'rgba(255,255,255,0.08)'}`,
               }}
             >
-              <span>{TOOL_ICON[t.name] ?? '🔧'} {t.name}{summary ? ` · ${summary}` : ''}</span>
-              {resultLine && <span style={{ color: resultColor }}>{resultLine}</span>}
+              <span style={{ color: dot.color, fontSize: 11, flexShrink: 0 }} title={dot.label}>{dot.icon}</span>
+              <span style={{ color: 'rgba(255,255,255,0.75)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {TOOL_ICON[t.name] ?? '🔧'} {t.name}{summary ? ` · ${summary}` : ''}
+              </span>
               {canExpand && (
                 <ChevronRight size={11} style={{ flexShrink: 0, opacity: 0.55, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s ease' }} />
               )}
-            </span>
+            </div>
             {isOpen && canExpand && (
               <div style={{ width: '100%', maxWidth: 460, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {hasInput && (
@@ -83,7 +93,7 @@ function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
                 {result && (
                   <div>
                     <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 2, display: 'flex', justifyContent: 'space-between' }}>
-                      <span>输出 <span style={{ color: resultColor }}>{result.isError ? '✗' : '✓'}</span></span>
+                      <span>输出 <span style={{ color: dot.color }}>{result.isError ? '✗' : '✓'}</span></span>
                       <span style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.6)' }} onClick={() => copyText(result.content).then((ok) => useToastStore.getState().show(ok ? '已复制输出' : '复制失败'))}>复制</span>
                     </div>
                     <pre style={{ ...PRE_STYLE, maxHeight: 240, overflowY: 'auto' }}>{result.content || '(空)'}</pre>
@@ -97,6 +107,41 @@ function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
     </div>
   )
 }
+
+/**
+ * 单条消息渲染。memo 化:store 每次 partial upsert 只换当前那条消息对象引用,
+ * 历史消息引用稳定 → 跳过重渲(含其 MarkdownPreview),消除 O(N) reconcile。
+ * key 用列表索引:单会话内只追加/末尾 upsert(不中间插删);loadHistory 前置合并仅切会话时跑一次,整体替换为新数组,key 空间重置,不影响稳定。
+ */
+const MessageItem = memo(function MessageItem({ m }: { m: AgentMessage }) {
+  if (m.role === 'user') {
+    return (
+      <div style={{ alignSelf: 'flex-end', maxWidth: '75%', background: 'rgba(10,132,255,0.18)', border: '1px solid rgba(10,132,255,0.3)', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', fontSize: 12.5, lineHeight: 1.5 }}>
+        {m.text}
+      </div>
+    )
+  }
+  if (m.role === 'assistant') {
+    const streaming = (m as { partial?: boolean }).partial
+    return (
+      <div style={{ alignSelf: 'flex-start', maxWidth: '88%', display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {m.text && (
+          <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+            <MemoMarkdown content={m.text} linkTarget="_blank" streaming={streaming} />
+            {streaming && <span className="fb-cursor">▋</span>}
+          </div>
+        )}
+        <ToolPills toolUses={m.toolUses} />
+      </div>
+    )
+  }
+  // system:error 与 result+isError 都走 describeSystemError
+  if (m.kind === 'error' || (m.kind === 'result' && (m.meta as { isError?: boolean })?.isError)) {
+    const { prefix, title, detail, raw } = describeSystemError(m)
+    return <ErrorCard prefix={prefix} title={title} detail={detail} raw={raw} />
+  }
+  return null
+})
 
 /** 错误卡片:归一化标题 + 可折叠原文 + 复制错误。error 与 result+isError 复用。 */
 function ErrorCard({ prefix, title, detail, raw }: { prefix: string; title: string; detail: string; raw: string }) {
@@ -390,35 +435,9 @@ claude   # 登录`}
               点左侧"新会话"或直接输入消息开始
             </div>
           )}
-          {activeMessages.map((m, i) => {
-            if (m.role === 'user') {
-              return (
-                <div key={i} style={{ alignSelf: 'flex-end', maxWidth: '75%', background: 'rgba(10,132,255,0.18)', border: '1px solid rgba(10,132,255,0.3)', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', fontSize: 12.5, lineHeight: 1.5 }}>
-                  {m.text}
-                </div>
-              )
-            }
-            if (m.role === 'assistant') {
-              const streaming = (m as { partial?: boolean }).partial
-              return (
-                <div key={i} style={{ alignSelf: 'flex-start', maxWidth: '88%', display: 'flex', flexDirection: 'column', gap: 0 }}>
-                  {m.text && (
-                    <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>
-                      <MarkdownPreview content={m.text} linkTarget="_blank" streaming={streaming} />
-                      {streaming && <span className="fb-cursor">▋</span>}
-                    </div>
-                  )}
-                  <ToolPills toolUses={m.toolUses} />
-                </div>
-              )
-            }
-            // system:error 与 result+isError 都走 describeSystemError,卡片与 toast 共用 prefix/title。
-            if (m.kind === 'error' || (m.kind === 'result' && (m.meta as { isError?: boolean })?.isError)) {
-              const { prefix, title, detail, raw } = describeSystemError(m)
-              return <ErrorCard key={i} prefix={prefix} title={title} detail={detail} raw={raw} />
-            }
-            return null
-          })}
+          {activeMessages.map((m, i) => (
+            <MessageItem key={i} m={m} />
+          ))}
           {showThinking && (
             <div style={{ alignSelf: 'flex-start', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
               思考中

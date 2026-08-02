@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { summarizeToolInput, summarizeToolResult } from '../tool-input-summary'
-import type { ToolResult } from '../../../../shared/agent-types'
+import { summarizeToolInput, toolStatus } from '../tool-input-summary'
 
 describe('summarizeToolInput', () => {
   it('Read 取 file_path 的 basename', () => {
@@ -44,27 +43,18 @@ describe('summarizeToolInput', () => {
   })
 })
 
-describe('summarizeToolResult', () => {
-  it('成功且非空:✓ + 字符数 + 行数', () => {
-    const r: ToolResult = { content: 'a\nb\nc', isError: false, chars: 5, lines: 3 }
-    expect(summarizeToolResult(r)).toBe('✓ 5 字 · 3 行')
+describe('toolStatus', () => {
+  it('无 result 时为 pending', () => {
+    expect(toolStatus({})).toBe('pending')
+    expect(toolStatus({ result: undefined })).toBe('pending')
+    expect(toolStatus({ result: null })).toBe('pending')
   })
-  it('成功但空内容:✓ 空', () => {
-    expect(summarizeToolResult({ content: '', isError: false, chars: 0, lines: 0 })).toBe('✓ 空')
+
+  it('result 成功时为 success', () => {
+    expect(toolStatus({ result: { isError: false } })).toBe('success')
   })
-  it('成功大输出按 K 显示(字符数,非字节)', () => {
-    expect(summarizeToolResult({ content: 'x', isError: false, chars: 2048, lines: 1 })).toBe('✓ 2.0K 字 · 1 行')
-  })
-  it('成功超大输出按 M 显示', () => {
-    expect(summarizeToolResult({ content: 'x', isError: false, chars: 1_500_000, lines: 1 })).toBe('✓ 1.5M 字 · 1 行')
-  })
-  it('失败:✗ + 首行片段', () => {
-    expect(summarizeToolResult({ content: 'command not found\nexit 127', isError: true, chars: 20, lines: 2 })).toBe('✗ command not found')
-  })
-  it('失败内容以空行开头(stderr/SDK 包装常见):取首个非空行,不退化为执行失败', () => {
-    expect(summarizeToolResult({ content: '\ncommand not found\nexit 127', isError: true, chars: 28, lines: 3 })).toBe('✗ command not found')
-  })
-  it('失败但空:✗ 执行失败', () => {
-    expect(summarizeToolResult({ content: '', isError: true, chars: 0, lines: 0 })).toBe('✗ 执行失败')
+
+  it('result 出错时为 error', () => {
+    expect(toolStatus({ result: { isError: true } })).toBe('error')
   })
 })
