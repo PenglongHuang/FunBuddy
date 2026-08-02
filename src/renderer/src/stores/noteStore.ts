@@ -6,6 +6,16 @@ import { titleToSlug } from '@/utils/slug'
 import type { Note } from '@/types/note'
 import type { Tab } from '@/types/tab'
 import { useSettingsStore } from './settingsStore'
+import {
+  closeOtherTabs as reduceCloseOtherTabs,
+  closeTab as reduceCloseTab,
+  closeUnpinnedTabs as reduceCloseUnpinnedTabs,
+  deactivateTabs,
+  openTab as reduceOpenTab,
+  reorderTabs as reduceReorderTabs,
+  switchTab as reduceSwitchTab,
+  togglePinned,
+} from './shared/tab-state'
 
 
 interface NoteStore {
@@ -229,103 +239,66 @@ export const useNoteStore = create<NoteStore>()(
     setActiveNote: (id) => set({ activeNoteId: id }),
 
     openTab: (id) => {
-      const { tabs, notes } = get()
-      const note = notes.find((n) => n.id === id)
+      const note = get().notes.find((n) => n.id === id)
       if (!note) return
-      const existing = tabs.find((t) => t.id === id)
-      if (existing) {
-        set({ activeTabId: id, activeNoteId: id })
-      } else {
-        const newTab: Tab = { id, title: note.title, pinned: false }
-        set((s) => {
-          const maxTabs = useSettingsStore.getState().app.maxTabsPerPanel || 20
-          if (s.tabs.length >= maxTabs) {
-            let lastUnpinnedIdx = -1
-            for (let i = s.tabs.length - 1; i >= 0; i--) {
-              if (!s.tabs[i].pinned) { lastUnpinnedIdx = i; break }
-            }
-            if (lastUnpinnedIdx !== -1) {
-              s.tabs.splice(lastUnpinnedIdx, 1)
-            }
-          }
-          s.tabs.push(newTab)
-          s.activeTabId = id
-          s.activeNoteId = id
-        })
-      }
+      const result = reduceOpenTab(
+        { tabs: get().tabs, activeTabId: get().activeTabId },
+        { id, title: note.title, pinned: false },
+        useSettingsStore.getState().app.maxTabsPerPanel || 20,
+      )
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     closeTab: (id) => {
-      const { tabs, activeTabId } = get()
-      const idx = tabs.findIndex((t) => t.id === id)
-      if (idx === -1) return
-      const remaining = tabs.filter((t) => t.id !== id)
-      let nextActiveId: string | null = null
-      if (activeTabId === id) {
-        if (remaining.length > 0) {
-          const nextIdx = Math.min(idx, remaining.length - 1)
-          nextActiveId = remaining[nextIdx].id
-        }
-      } else {
-        nextActiveId = activeTabId
-      }
-      set({ tabs: remaining, activeTabId: nextActiveId, activeNoteId: nextActiveId })
+      const current = { tabs: get().tabs, activeTabId: get().activeTabId }
+      const result = reduceCloseTab(current, id)
+      if (result === current) return
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     switchTab: (id) => {
-      const { tabs } = get()
-      if (!tabs.some((t) => t.id === id)) return
-      set({ activeTabId: id, activeNoteId: id })
+      const current = { tabs: get().tabs, activeTabId: get().activeTabId }
+      const result = reduceSwitchTab(current, id)
+      if (result === current) return
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     deactivateTab: () => {
-      set({ activeTabId: null, activeNoteId: null })
+      const result = deactivateTabs({ tabs: get().tabs, activeTabId: get().activeTabId })
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     pinTab: (id) => {
-      set((s) => {
-        const tab = s.tabs.find((t) => t.id === id)
-        if (!tab) return
-        tab.pinned = !tab.pinned
-        const pinned = s.tabs.filter((t) => t.pinned)
-        const unpinned = s.tabs.filter((t) => !t.pinned)
-        s.tabs = [...pinned, ...unpinned]
-      })
+      const result = togglePinned({ tabs: get().tabs, activeTabId: get().activeTabId }, id)
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     reorderTabs: (fromIdx, toIdx) => {
-      set((s) => {
-        const [moved] = s.tabs.splice(fromIdx, 1)
-        s.tabs.splice(toIdx, 0, moved)
-        const pinned = s.tabs.filter((t) => t.pinned)
-        const unpinned = s.tabs.filter((t) => !t.pinned)
-        s.tabs = [...pinned, ...unpinned]
-      })
+      const result = reduceReorderTabs(
+        { tabs: get().tabs, activeTabId: get().activeTabId },
+        fromIdx,
+        toIdx,
+      )
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     closeOtherTabs: (id) => {
-      const tab = get().tabs.find((t) => t.id === id)
-      if (!tab) return
-      set((s) => {
-        s.tabs = s.tabs.filter((t) => t.id === id || t.pinned)
-      })
-      const newActive = get().tabs.find((t) => t.id === id) ? id : get().tabs[0]?.id ?? null
-      set({ activeTabId: newActive, activeNoteId: newActive })
+      const current = { tabs: get().tabs, activeTabId: get().activeTabId }
+      const result = reduceCloseOtherTabs(current, id)
+      if (result === current) return
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     closeUnpinnedTabs: () => {
-      set((s) => {
-        s.tabs = s.tabs.filter((t) => t.pinned)
-      })
-      const newActive = get().tabs[0]?.id ?? null
-      set({ activeTabId: newActive, activeNoteId: newActive })
+      const result = reduceCloseUnpinnedTabs({ tabs: get().tabs, activeTabId: get().activeTabId })
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
