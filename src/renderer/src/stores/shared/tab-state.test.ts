@@ -40,8 +40,27 @@ describe('shared tab state', () => {
     })
   })
 
+  it('appends a new tab without reordering the existing snapshot', () => {
+    const unorderedTabs = [tabs[1], tabs[0]]
+    expect(openTab(
+      { tabs: unorderedTabs, activeTabId: 'b' },
+      { id: 'd', title: 'D', pinned: true },
+      20,
+    )).toEqual({
+      tabs: [...unorderedTabs, { id: 'd', title: 'D', pinned: true }],
+      activeTabId: 'd',
+    })
+  })
+
   it('selects the neighbor when closing the active tab', () => {
     expect(closeTab({ tabs, activeTabId: 'b' }, 'b')).toEqual({
+      tabs: [tabs[0], tabs[2]],
+      activeTabId: 'c',
+    })
+  })
+
+  it('keeps the active tab when closing a different tab', () => {
+    expect(closeTab({ tabs, activeTabId: 'c' }, 'b')).toEqual({
       tabs: [tabs[0], tabs[2]],
       activeTabId: 'c',
     })
@@ -68,15 +87,21 @@ describe('shared tab state', () => {
     })
   })
 
-  it('does not mutate or corrupt state for unknown ids and invalid indices', () => {
+  it('preserves existing splice boundary behavior when reordering', () => {
+    const state = { tabs, activeTabId: 'b' }
+
+    expect(reorderTabs(state, -1, 0).tabs.map((tab) => tab.id)).toEqual(['a', 'c', 'b'])
+    expect(reorderTabs(state, 1, 3).tabs.map((tab) => tab.id)).toEqual(['a', 'c', 'b'])
+    expect(reorderTabs(state, 3, 0)).toBe(state)
+  })
+
+  it('does not mutate state for unknown ids', () => {
     const state = { tabs, activeTabId: 'b' }
 
     expect(closeTab(state, 'missing')).toBe(state)
     expect(switchTab(state, 'missing')).toBe(state)
     expect(togglePinned(state, 'missing')).toBe(state)
     expect(closeOtherTabs(state, 'missing')).toBe(state)
-    expect(reorderTabs(state, -1, 0)).toBe(state)
-    expect(reorderTabs(state, 1, 3)).toBe(state)
     expect(state).toEqual({ tabs, activeTabId: 'b' })
   })
 })

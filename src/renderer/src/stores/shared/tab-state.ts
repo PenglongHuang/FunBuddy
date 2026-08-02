@@ -25,7 +25,7 @@ export function openTab(state: TabSnapshot, tab: Tab, maxTabs: number): TabSnaps
   }
   tabs.push(tab)
 
-  return { tabs: pinnedFirst(tabs), activeTabId: tab.id }
+  return { tabs, activeTabId: tab.id }
 }
 
 export function closeTab(state: TabSnapshot, id: string): TabSnapshot {
@@ -60,19 +60,9 @@ export function reorderTabs(
   fromIndex: number,
   toIndex: number,
 ): TabSnapshot {
-  if (
-    !Number.isInteger(fromIndex)
-    || !Number.isInteger(toIndex)
-    || fromIndex < 0
-    || fromIndex >= state.tabs.length
-    || toIndex < 0
-    || toIndex >= state.tabs.length
-  ) {
-    return state
-  }
-
   const tabs = [...state.tabs]
   const [moved] = tabs.splice(fromIndex, 1)
+  if (!moved) return state
   tabs.splice(toIndex, 0, moved)
   return { ...state, tabs: pinnedFirst(tabs) }
 }
