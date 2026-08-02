@@ -5,7 +5,7 @@ import MarkdownPreview from '@/components/common/MarkdownPreview'
 import { useAgentStore } from '@/stores/agentStore'
 import { useToastStore } from '@/stores/toastStore'
 import { aiEvents, ai, dialog, fs } from '@/lib/ipc'
-import { summarizeToolInput, summarizeToolResult, toolStatus, type ToolStatus } from '@/lib/tool-input-summary'
+import { summarizeToolInput, toolStatus, type ToolStatus } from '@/lib/tool-input-summary'
 import { describeSystemError } from '@/lib/normalize-error'
 import type { AgentMessage, AgentTask, AgentTaskStatus, ProviderInfo, ToolUse } from '../../../../shared/agent-types'
 
@@ -62,7 +62,6 @@ function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
         const hasInput = t.input != null
         const result = t.result
         const canExpand = hasInput || !!result
-        const resultLine = result ? summarizeToolResult(result) : ''
         return (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div
@@ -79,7 +78,6 @@ function ToolPills({ toolUses }: { toolUses: ToolUse[] }) {
               <span style={{ color: 'rgba(255,255,255,0.75)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {TOOL_ICON[t.name] ?? '🔧'} {t.name}{summary ? ` · ${summary}` : ''}
               </span>
-              {resultLine && <span style={{ color: dot.color, flexShrink: 0 }}>{resultLine}</span>}
               {canExpand && (
                 <ChevronRight size={11} style={{ flexShrink: 0, opacity: 0.55, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s ease' }} />
               )}
