@@ -76,6 +76,22 @@ function createOptions(documentId: string, saveContent = vi.fn().mockResolvedVal
 }
 
 describe('DocumentPersistenceCoordinator', () => {
+  it('discards a delayed load after the same document was edited and saved', async () => {
+    const coordinator = new DocumentPersistenceCoordinator()
+    const session = coordinator.activate(createOptions('a'))
+    const loadGeneration = coordinator.snapshot(session).generation
+
+    coordinator.change(session, '# User content')
+    await coordinator.save(session)
+
+    expect(coordinator.snapshot(session).dirty).toBe(false)
+    expect(coordinator.load(session, '# Stale disk content', loadGeneration)).toBe(false)
+    expect(coordinator.snapshot(session)).toMatchObject({
+      content: '# User content',
+      dirty: false,
+    })
+  })
+
   it('keeps a loading document empty when another dirty document is cleaned up', async () => {
     const coordinator = new DocumentPersistenceCoordinator()
     const saveA = vi.fn().mockResolvedValue(undefined)

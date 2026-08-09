@@ -20,6 +20,7 @@ describe('PlanEditor architecture', () => {
     ]
 
     expect(source).toContain('MarkdownDocumentEditor')
+    expect(source).toContain("placeholder={'# 计划内容\\n\\n- [ ] 待办项 1\\n- [ ] 待办项 2'}")
     for (const name of forbiddenNames) {
       expect(source).not.toContain(name)
     }

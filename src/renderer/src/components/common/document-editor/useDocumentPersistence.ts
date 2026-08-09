@@ -75,8 +75,8 @@ export class DocumentPersistenceCoordinator {
     return session.dirty
   }
 
-  load(session: DocumentSession, content: string): boolean {
-    if (!this.isActive(session)) return false
+  load(session: DocumentSession, content: string, generation: number): boolean {
+    if (!this.isActive(session) || session.generation !== generation) return false
 
     session.content = content
     session.dirty = false
@@ -139,10 +139,11 @@ export function useDocumentPersistence(options: UseDocumentPersistenceOptions): 
   useEffect(() => {
     let active = true
     const loadingSession = activeSession
+    const loadingGeneration = coordinator.snapshot(loadingSession).generation
 
     options.loadContent()
       .then((loadedContent) => {
-        if (active && coordinator.load(loadingSession, loadedContent)) {
+        if (active && coordinator.load(loadingSession, loadedContent, loadingGeneration)) {
           contentRef.current = loadedContent
           refresh((version) => version + 1)
         }

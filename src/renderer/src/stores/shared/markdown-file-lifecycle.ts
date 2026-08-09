@@ -1,4 +1,5 @@
 interface FileIo {
+  exists: (path: string) => Promise<boolean>
   readFile: (path: string) => Promise<string>
   writeFile: (path: string, content: string) => Promise<void>
   deleteFile: (path: string) => Promise<void>
@@ -14,12 +15,15 @@ export async function appendIndexRecord<T>(
   indexPath: string,
   record: T,
 ): Promise<void> {
-  let records: T[] = []
-  try {
+  let records: T[]
+  if (await io.exists(indexPath)) {
     const parsed: unknown = JSON.parse(await io.readFile(indexPath))
-    if (Array.isArray(parsed)) records = parsed as T[]
-  } catch {
-    // Missing or malformed indexes start fresh, matching existing note creation behavior.
+    if (!Array.isArray(parsed)) {
+      throw new TypeError('Markdown index must contain an array')
+    }
+    records = parsed as T[]
+  } else {
+    records = []
   }
   records.push(record)
   await io.writeFile(indexPath, JSON.stringify(records, null, 2))

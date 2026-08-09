@@ -32,7 +32,7 @@ export default function PlanEditor({ planId }: PlanEditorProps) {
       mode={mode}
       onModeChange={(nextMode) => usePlanStore.getState().setEditorMode(nextMode)}
       tocMaxLevel={tocMaxLevel}
-      placeholder={'# 璁″垝鍐呭\n\n- [ ] 寰呭姙椤?1\n- [ ] 寰呭姙椤?2'}
+      placeholder={'# 计划内容\n\n- [ ] 待办项 1\n- [ ] 待办项 2'}
       loadContent={loadContent}
       saveContent={saveContent}
       updateTitle={updateTitle}

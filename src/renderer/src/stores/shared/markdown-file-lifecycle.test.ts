@@ -5,8 +5,9 @@ import {
   moveMarkdownDocument,
 } from './markdown-file-lifecycle'
 
-function fakeIo(initial = '[]') {
+function fakeIo(initial = '[]', exists = true) {
   return {
+    exists: vi.fn(async () => exists),
     readFile: vi.fn(async () => initial),
     writeFile: vi.fn(async () => undefined),
     deleteFile: vi.fn(async () => undefined),
@@ -26,6 +27,7 @@ describe('Markdown file lifecycle', () => {
 
     await appendIndexRecord(io, 'plans/index.json', { id: 'new' })
 
+    expect(io.exists).toHaveBeenCalledWith('plans/index.json')
     expect(io.readFile).toHaveBeenCalledWith('plans/index.json')
     expect(io.writeFile).toHaveBeenCalledWith(
       'plans/index.json',
@@ -33,19 +35,51 @@ describe('Markdown file lifecycle', () => {
     )
   })
 
+  it('starts a fresh index only when the index file does not exist', async () => {
+    const io = fakeIo('unread', false)
+
+    await appendIndexRecord(io, 'notes/index.json', { id: 'new' })
+
+    expect(io.readFile).not.toHaveBeenCalled()
+    expect(io.writeFile).toHaveBeenCalledWith(
+      'notes/index.json',
+      JSON.stringify([{ id: 'new' }], null, 2),
+    )
+  })
+
   it.each(['not json', '{}', 'null'])(
-    'starts a fresh index when the on-disk value is invalid: %s',
+    'rejects an existing malformed or non-array index without overwriting it: %s',
     async (initial) => {
       const io = fakeIo(initial)
 
-      await appendIndexRecord(io, 'notes/index.json', { id: 'new' })
+      await expect(
+        appendIndexRecord(io, 'notes/index.json', { id: 'new' }),
+      ).rejects.toThrow()
 
-      expect(io.writeFile).toHaveBeenCalledWith(
-        'notes/index.json',
-        JSON.stringify([{ id: 'new' }], null, 2),
-      )
+      expect(io.writeFile).not.toHaveBeenCalled()
     },
   )
+
+  it('propagates an index read error without overwriting the index', async () => {
+    const error = new Error('permission denied')
+    const io = fakeIo()
+    io.readFile.mockRejectedValue(error)
+
+    await expect(appendIndexRecord(io, 'notes/index.json', { id: 'new' })).rejects.toBe(error)
+
+    expect(io.writeFile).not.toHaveBeenCalled()
+  })
+
+  it('propagates an existence check error without reading or writing the index', async () => {
+    const error = new Error('storage unavailable')
+    const io = fakeIo()
+    io.exists.mockRejectedValue(error)
+
+    await expect(appendIndexRecord(io, 'notes/index.json', { id: 'new' })).rejects.toBe(error)
+
+    expect(io.readFile).not.toHaveBeenCalled()
+    expect(io.writeFile).not.toHaveBeenCalled()
+  })
 
   it('cleans assets before deleting Markdown and tolerates both failures', async () => {
     const events: string[] = []
