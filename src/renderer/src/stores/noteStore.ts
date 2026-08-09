@@ -16,6 +16,11 @@ import {
   switchTab as reduceSwitchTab,
   togglePinned,
 } from './shared/tab-state'
+import {
+  appendIndexRecord,
+  deleteMarkdownDocument,
+  moveMarkdownDocument,
+} from './shared/markdown-file-lifecycle'
 
 
 interface NoteStore {
@@ -117,15 +122,7 @@ export const useNoteStore = create<NoteStore>()(
       const note: Note = { id, title, filePath, color, tags: tags ?? [], createdAt: now, updatedAt: now }
 
       await fs.writeFile(filePath, content || `# ${title}\n\n`)
-
-      // Read-modify-write to avoid overwriting notes from other windows
-      let diskNotes: Note[] = []
-      try {
-        diskNotes = JSON.parse(await fs.readFile('notes/index.json'))
-      } catch { /* empty or missing */ }
-      diskNotes.push(note)
-      await fs.writeFile('notes/index.json', JSON.stringify(diskNotes, null, 2))
-
+      await appendIndexRecord<Note>(fs, 'notes/index.json', note)
       set((s) => { s.notes.push(note) })
       return note
     },
@@ -133,8 +130,7 @@ export const useNoteStore = create<NoteStore>()(
     deleteNote: async (id) => {
       const note = get().notes.find((n) => n.id === id)
       if (note) {
-        try { await imageApi.cleanup(note.filePath) } catch {}
-        try { await fs.deleteFile(note.filePath) } catch {}
+        await deleteMarkdownDocument(fs, imageApi, note.filePath)
       }
       set((s) => { s.notes = s.notes.filter((n) => n.id !== id) })
       await fs.writeFile('notes/index.json', JSON.stringify(get().notes, null, 2))
@@ -146,8 +142,7 @@ export const useNoteStore = create<NoteStore>()(
       const notes = get().notes
       for (const note of notes) {
         if (idSet.has(note.id)) {
-          try { await imageApi.cleanup(note.filePath) } catch {}
-          try { await fs.deleteFile(note.filePath) } catch { /* already deleted */ }
+          await deleteMarkdownDocument(fs, imageApi, note.filePath)
         }
       }
       set((s) => { s.notes = s.notes.filter((n) => !idSet.has(n.id)) })
@@ -185,10 +180,7 @@ export const useNoteStore = create<NoteStore>()(
       const newFilePath = `notes/${id}-${slug}.md`
 
       if (newFilePath !== note.filePath) {
-        const content = await fs.readFile(note.filePath)
-        await fs.writeFile(newFilePath, content)
-        try { await fs.deleteFile(note.filePath) } catch {}
-        try { await imageApi.moveAssets(note.filePath, newFilePath) } catch {}
+        await moveMarkdownDocument(fs, imageApi, note.filePath, newFilePath)
       }
 
       set((s) => {

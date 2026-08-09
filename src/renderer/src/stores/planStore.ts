@@ -16,6 +16,11 @@ import {
   switchTab as reduceSwitchTab,
   togglePinned,
 } from './shared/tab-state'
+import {
+  appendIndexRecord,
+  deleteMarkdownDocument,
+  moveMarkdownDocument,
+} from './shared/markdown-file-lifecycle'
 
 const COLOR_MAP: Record<PlanType, string> = {
   daily: '#60a5fa',
@@ -170,8 +175,8 @@ export const usePlanStore = create<PlanStore>()(
       const plan: Plan = { id, title, startDate, endDate, filePath, color, planType: resolvedType, tags: [], createdAt: now, updatedAt: now }
 
       await fs.writeFile(filePath, content || `# ${title}\n\n`)
+      await appendIndexRecord<Plan>(fs, 'plans/index.json', plan)
       set((s) => { s.plans.push(plan) })
-      await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
       return plan
     },
 
@@ -188,10 +193,7 @@ export const usePlanStore = create<PlanStore>()(
 
       // Move file if path changed
       if (newFilePath !== plan.filePath) {
-        const content = await fs.readFile(plan.filePath)
-        await fs.writeFile(newFilePath, content)
-        try { await fs.deleteFile(plan.filePath) } catch { /* ignore */ }
-        try { await imageApi.moveAssets(plan.filePath, newFilePath) } catch {}
+        await moveMarkdownDocument(fs, imageApi, plan.filePath, newFilePath)
       }
 
       set((s) => {
@@ -215,8 +217,7 @@ export const usePlanStore = create<PlanStore>()(
     deletePlan: async (id) => {
       const plan = get().plans.find((p) => p.id === id)
       if (plan) {
-        try { await imageApi.cleanup(plan.filePath) } catch {}
-        try { await fs.deleteFile(plan.filePath) } catch { /* already deleted */ }
+        await deleteMarkdownDocument(fs, imageApi, plan.filePath)
       }
       set((s) => { s.plans = s.plans.filter((p) => p.id !== id) })
       await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
@@ -228,8 +229,7 @@ export const usePlanStore = create<PlanStore>()(
       const plans = get().plans
       for (const plan of plans) {
         if (idSet.has(plan.id)) {
-          try { await imageApi.cleanup(plan.filePath) } catch {}
-          try { await fs.deleteFile(plan.filePath) } catch { /* already deleted */ }
+          await deleteMarkdownDocument(fs, imageApi, plan.filePath)
         }
       }
       set((s) => { s.plans = s.plans.filter((p) => !idSet.has(p.id)) })
