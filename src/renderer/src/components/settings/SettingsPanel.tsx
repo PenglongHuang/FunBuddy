@@ -358,8 +358,7 @@ export default function SettingsPanel() {
 
   const plans = usePlanStore((s) => s.plans)
   const notes = useNoteStore((s) => s.notes)
-  const tocMaxLevel = useNoteStore((s) => s.tocMaxLevel)
-  const setTocMaxLevel = useNoteStore((s) => s.setTocMaxLevel)
+  const tocMaxLevel = useSettingsStore((s) => s.app.tocMaxLevel)
 
   const handleExportJSON = async () => {
     try {
@@ -697,7 +696,10 @@ export default function SettingsPanel() {
           unit="级"
           min={1}
           max={6}
-          onChange={setTocMaxLevel}
+          onChange={(value) => {
+            setPendingApp((pending) => ({ ...pending, tocMaxLevel: value }))
+            updateApp({ tocMaxLevel: value })
+          }}
         />
         <NumberInputRow
           label="最大 Tab 数"

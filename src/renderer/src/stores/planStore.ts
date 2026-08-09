@@ -6,6 +6,21 @@ import { titleToSlug } from '@/utils/slug'
 import type { Plan, PlanType } from '@/types/plan'
 import type { Tab } from '@/types/tab'
 import { useSettingsStore } from './settingsStore'
+import {
+  closeOtherTabs as reduceCloseOtherTabs,
+  closeTab as reduceCloseTab,
+  closeUnpinnedTabs as reduceCloseUnpinnedTabs,
+  deactivateTabs,
+  openTab as reduceOpenTab,
+  reorderTabs as reduceReorderTabs,
+  switchTab as reduceSwitchTab,
+  togglePinned,
+} from './shared/tab-state'
+import {
+  appendIndexRecord,
+  deleteMarkdownDocument,
+  moveMarkdownDocument,
+} from './shared/markdown-file-lifecycle'
 
 const COLOR_MAP: Record<PlanType, string> = {
   daily: '#60a5fa',
@@ -160,8 +175,8 @@ export const usePlanStore = create<PlanStore>()(
       const plan: Plan = { id, title, startDate, endDate, filePath, color, planType: resolvedType, tags: [], createdAt: now, updatedAt: now }
 
       await fs.writeFile(filePath, content || `# ${title}\n\n`)
+      await appendIndexRecord<Plan>(fs, 'plans/index.json', plan)
       set((s) => { s.plans.push(plan) })
-      await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
       return plan
     },
 
@@ -178,10 +193,7 @@ export const usePlanStore = create<PlanStore>()(
 
       // Move file if path changed
       if (newFilePath !== plan.filePath) {
-        const content = await fs.readFile(plan.filePath)
-        await fs.writeFile(newFilePath, content)
-        try { await fs.deleteFile(plan.filePath) } catch { /* ignore */ }
-        try { await imageApi.moveAssets(plan.filePath, newFilePath) } catch {}
+        await moveMarkdownDocument(fs, imageApi, plan.filePath, newFilePath)
       }
 
       set((s) => {
@@ -205,8 +217,7 @@ export const usePlanStore = create<PlanStore>()(
     deletePlan: async (id) => {
       const plan = get().plans.find((p) => p.id === id)
       if (plan) {
-        try { await imageApi.cleanup(plan.filePath) } catch {}
-        try { await fs.deleteFile(plan.filePath) } catch { /* already deleted */ }
+        await deleteMarkdownDocument(fs, imageApi, plan.filePath)
       }
       set((s) => { s.plans = s.plans.filter((p) => p.id !== id) })
       await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
@@ -218,8 +229,7 @@ export const usePlanStore = create<PlanStore>()(
       const plans = get().plans
       for (const plan of plans) {
         if (idSet.has(plan.id)) {
-          try { await imageApi.cleanup(plan.filePath) } catch {}
-          try { await fs.deleteFile(plan.filePath) } catch { /* already deleted */ }
+          await deleteMarkdownDocument(fs, imageApi, plan.filePath)
         }
       }
       set((s) => { s.plans = s.plans.filter((p) => !idSet.has(p.id)) })
@@ -313,103 +323,66 @@ export const usePlanStore = create<PlanStore>()(
     },
 
     openTab: (id) => {
-      const { tabs, plans, activeTabId } = get()
-      const plan = plans.find((p) => p.id === id)
+      const plan = get().plans.find((p) => p.id === id)
       if (!plan) return
-      const existing = tabs.find((t) => t.id === id)
-      if (existing) {
-        set({ activeTabId: id, activePlanId: id })
-      } else {
-        const newTab: Tab = { id, title: plan.title, pinned: false }
-        set((s) => {
-          const maxTabs = useSettingsStore.getState().app.maxTabsPerPanel || 20
-          if (s.tabs.length >= maxTabs) {
-            let lastUnpinnedIdx = -1
-            for (let i = s.tabs.length - 1; i >= 0; i--) {
-              if (!s.tabs[i].pinned) { lastUnpinnedIdx = i; break }
-            }
-            if (lastUnpinnedIdx !== -1) {
-              s.tabs.splice(lastUnpinnedIdx, 1)
-            }
-          }
-          s.tabs.push(newTab)
-          s.activeTabId = id
-          s.activePlanId = id
-        })
-      }
+      const result = reduceOpenTab(
+        { tabs: get().tabs, activeTabId: get().activeTabId },
+        { id, title: plan.title, pinned: false },
+        useSettingsStore.getState().app.maxTabsPerPanel || 20,
+      )
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activePlanId: result.activeTabId })
       persistPlanPrefs(get)
     },
 
     closeTab: (id) => {
-      const { tabs, activeTabId } = get()
-      const idx = tabs.findIndex((t) => t.id === id)
-      if (idx === -1) return
-      const remaining = tabs.filter((t) => t.id !== id)
-      let nextActiveId: string | null = null
-      if (activeTabId === id) {
-        if (remaining.length > 0) {
-          const nextIdx = Math.min(idx, remaining.length - 1)
-          nextActiveId = remaining[nextIdx].id
-        }
-      } else {
-        nextActiveId = activeTabId
-      }
-      set({ tabs: remaining, activeTabId: nextActiveId, activePlanId: nextActiveId })
+      const current = { tabs: get().tabs, activeTabId: get().activeTabId }
+      const result = reduceCloseTab(current, id)
+      if (result === current) return
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activePlanId: result.activeTabId })
       persistPlanPrefs(get)
     },
 
     switchTab: (id) => {
-      const { tabs } = get()
-      if (!tabs.some((t) => t.id === id)) return
-      set({ activeTabId: id, activePlanId: id })
+      const current = { tabs: get().tabs, activeTabId: get().activeTabId }
+      const result = reduceSwitchTab(current, id)
+      if (result === current) return
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activePlanId: result.activeTabId })
       persistPlanPrefs(get)
     },
 
     deactivateTab: () => {
-      set({ activeTabId: null, activePlanId: null })
+      const result = deactivateTabs({ tabs: get().tabs, activeTabId: get().activeTabId })
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activePlanId: result.activeTabId })
       persistPlanPrefs(get)
     },
 
     pinTab: (id) => {
-      set((s) => {
-        const tab = s.tabs.find((t) => t.id === id)
-        if (!tab) return
-        tab.pinned = !tab.pinned
-        const pinned = s.tabs.filter((t) => t.pinned)
-        const unpinned = s.tabs.filter((t) => !t.pinned)
-        s.tabs = [...pinned, ...unpinned]
-      })
+      const result = togglePinned({ tabs: get().tabs, activeTabId: get().activeTabId }, id)
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activePlanId: result.activeTabId })
       persistPlanPrefs(get)
     },
 
     reorderTabs: (fromIdx, toIdx) => {
-      set((s) => {
-        const [moved] = s.tabs.splice(fromIdx, 1)
-        s.tabs.splice(toIdx, 0, moved)
-        const pinned = s.tabs.filter((t) => t.pinned)
-        const unpinned = s.tabs.filter((t) => !t.pinned)
-        s.tabs = [...pinned, ...unpinned]
-      })
+      const result = reduceReorderTabs(
+        { tabs: get().tabs, activeTabId: get().activeTabId },
+        fromIdx,
+        toIdx,
+      )
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activePlanId: result.activeTabId })
       persistPlanPrefs(get)
     },
 
     closeOtherTabs: (id) => {
-      const tab = get().tabs.find((t) => t.id === id)
-      if (!tab) return
-      set((s) => {
-        s.tabs = s.tabs.filter((t) => t.id === id || t.pinned)
-      })
-      const newActive = get().tabs.find((t) => t.id === id) ? id : get().tabs[0]?.id ?? null
-      set({ activeTabId: newActive, activePlanId: newActive })
+      const current = { tabs: get().tabs, activeTabId: get().activeTabId }
+      const result = reduceCloseOtherTabs(current, id)
+      if (result === current) return
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activePlanId: result.activeTabId })
       persistPlanPrefs(get)
     },
 
     closeUnpinnedTabs: () => {
-      set((s) => {
-        s.tabs = s.tabs.filter((t) => t.pinned)
-      })
-      const newActive = get().tabs[0]?.id ?? null
-      set({ activeTabId: newActive, activePlanId: newActive })
+      const result = reduceCloseUnpinnedTabs({ tabs: get().tabs, activeTabId: get().activeTabId })
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activePlanId: result.activeTabId })
       persistPlanPrefs(get)
     },
   })),
