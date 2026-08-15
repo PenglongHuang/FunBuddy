@@ -6,6 +6,21 @@ import { titleToSlug } from '@/utils/slug'
 import type { Note } from '@/types/note'
 import type { Tab } from '@/types/tab'
 import { useSettingsStore } from './settingsStore'
+import {
+  closeOtherTabs as reduceCloseOtherTabs,
+  closeTab as reduceCloseTab,
+  closeUnpinnedTabs as reduceCloseUnpinnedTabs,
+  deactivateTabs,
+  openTab as reduceOpenTab,
+  reorderTabs as reduceReorderTabs,
+  switchTab as reduceSwitchTab,
+  togglePinned,
+} from './shared/tab-state'
+import {
+  appendIndexRecord,
+  deleteMarkdownDocument,
+  moveMarkdownDocument,
+} from './shared/markdown-file-lifecycle'
 
 
 interface NoteStore {
@@ -17,7 +32,6 @@ interface NoteStore {
   sortBy: 'time' | 'name'
   viewMode: 'card' | 'compact'
   editorMode: 'live' | 'edit' | 'preview'
-  tocMaxLevel: number
   load: () => Promise<void>
   createNote: (title: string, content?: string, tags?: string[]) => Promise<Note>
   deleteNote: (id: string) => Promise<void>
@@ -33,7 +47,6 @@ interface NoteStore {
   setSortBy: (sort: 'time' | 'name') => void
   setViewMode: (mode: 'card' | 'compact') => void
   setEditorMode: (mode: 'live' | 'edit' | 'preview') => void
-  setTocMaxLevel: (level: number) => void
   openTab: (id: string) => void
   closeTab: (id: string) => void
   switchTab: (id: string) => void
@@ -54,7 +67,6 @@ export const useNoteStore = create<NoteStore>()(
     sortBy: 'time',
     viewMode: 'card',
     editorMode: 'edit' as const,
-    tocMaxLevel: 3,
 
     load: async () => {
       try {
@@ -72,7 +84,6 @@ export const useNoteStore = create<NoteStore>()(
           sortBy: string
           viewMode: string
           editorMode?: string
-          tocMaxLevel?: number
           tabs?: { id: string; title: string; pinned: boolean }[]
           activeTabId?: string | null
         }>('notePrefs')
@@ -91,7 +102,6 @@ export const useNoteStore = create<NoteStore>()(
             sortBy: (prefs.sortBy as any) ?? 'time',
             viewMode: (prefs.viewMode as any) ?? 'card',
             editorMode: (prefs.editorMode as 'live' | 'edit' | 'preview') ?? 'edit',
-            tocMaxLevel: prefs.tocMaxLevel ?? 3,
             tabs: refreshedTabs,
             activeTabId: validActiveTabId,
             activeNoteId: validActiveTabId,
@@ -112,15 +122,7 @@ export const useNoteStore = create<NoteStore>()(
       const note: Note = { id, title, filePath, color, tags: tags ?? [], createdAt: now, updatedAt: now }
 
       await fs.writeFile(filePath, content || `# ${title}\n\n`)
-
-      // Read-modify-write to avoid overwriting notes from other windows
-      let diskNotes: Note[] = []
-      try {
-        diskNotes = JSON.parse(await fs.readFile('notes/index.json'))
-      } catch { /* empty or missing */ }
-      diskNotes.push(note)
-      await fs.writeFile('notes/index.json', JSON.stringify(diskNotes, null, 2))
-
+      await appendIndexRecord<Note>(fs, 'notes/index.json', note)
       set((s) => { s.notes.push(note) })
       return note
     },
@@ -128,8 +130,7 @@ export const useNoteStore = create<NoteStore>()(
     deleteNote: async (id) => {
       const note = get().notes.find((n) => n.id === id)
       if (note) {
-        try { await imageApi.cleanup(note.filePath) } catch {}
-        try { await fs.deleteFile(note.filePath) } catch {}
+        await deleteMarkdownDocument(fs, imageApi, note.filePath)
       }
       set((s) => { s.notes = s.notes.filter((n) => n.id !== id) })
       await fs.writeFile('notes/index.json', JSON.stringify(get().notes, null, 2))
@@ -141,8 +142,7 @@ export const useNoteStore = create<NoteStore>()(
       const notes = get().notes
       for (const note of notes) {
         if (idSet.has(note.id)) {
-          try { await imageApi.cleanup(note.filePath) } catch {}
-          try { await fs.deleteFile(note.filePath) } catch { /* already deleted */ }
+          await deleteMarkdownDocument(fs, imageApi, note.filePath)
         }
       }
       set((s) => { s.notes = s.notes.filter((n) => !idSet.has(n.id)) })
@@ -180,10 +180,7 @@ export const useNoteStore = create<NoteStore>()(
       const newFilePath = `notes/${id}-${slug}.md`
 
       if (newFilePath !== note.filePath) {
-        const content = await fs.readFile(note.filePath)
-        await fs.writeFile(newFilePath, content)
-        try { await fs.deleteFile(note.filePath) } catch {}
-        try { await imageApi.moveAssets(note.filePath, newFilePath) } catch {}
+        await moveMarkdownDocument(fs, imageApi, note.filePath, newFilePath)
       }
 
       set((s) => {
@@ -234,103 +231,66 @@ export const useNoteStore = create<NoteStore>()(
     setActiveNote: (id) => set({ activeNoteId: id }),
 
     openTab: (id) => {
-      const { tabs, notes } = get()
-      const note = notes.find((n) => n.id === id)
+      const note = get().notes.find((n) => n.id === id)
       if (!note) return
-      const existing = tabs.find((t) => t.id === id)
-      if (existing) {
-        set({ activeTabId: id, activeNoteId: id })
-      } else {
-        const newTab: Tab = { id, title: note.title, pinned: false }
-        set((s) => {
-          const maxTabs = useSettingsStore.getState().app.maxTabsPerPanel || 20
-          if (s.tabs.length >= maxTabs) {
-            let lastUnpinnedIdx = -1
-            for (let i = s.tabs.length - 1; i >= 0; i--) {
-              if (!s.tabs[i].pinned) { lastUnpinnedIdx = i; break }
-            }
-            if (lastUnpinnedIdx !== -1) {
-              s.tabs.splice(lastUnpinnedIdx, 1)
-            }
-          }
-          s.tabs.push(newTab)
-          s.activeTabId = id
-          s.activeNoteId = id
-        })
-      }
+      const result = reduceOpenTab(
+        { tabs: get().tabs, activeTabId: get().activeTabId },
+        { id, title: note.title, pinned: false },
+        useSettingsStore.getState().app.maxTabsPerPanel || 20,
+      )
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     closeTab: (id) => {
-      const { tabs, activeTabId } = get()
-      const idx = tabs.findIndex((t) => t.id === id)
-      if (idx === -1) return
-      const remaining = tabs.filter((t) => t.id !== id)
-      let nextActiveId: string | null = null
-      if (activeTabId === id) {
-        if (remaining.length > 0) {
-          const nextIdx = Math.min(idx, remaining.length - 1)
-          nextActiveId = remaining[nextIdx].id
-        }
-      } else {
-        nextActiveId = activeTabId
-      }
-      set({ tabs: remaining, activeTabId: nextActiveId, activeNoteId: nextActiveId })
+      const current = { tabs: get().tabs, activeTabId: get().activeTabId }
+      const result = reduceCloseTab(current, id)
+      if (result === current) return
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     switchTab: (id) => {
-      const { tabs } = get()
-      if (!tabs.some((t) => t.id === id)) return
-      set({ activeTabId: id, activeNoteId: id })
+      const current = { tabs: get().tabs, activeTabId: get().activeTabId }
+      const result = reduceSwitchTab(current, id)
+      if (result === current) return
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     deactivateTab: () => {
-      set({ activeTabId: null, activeNoteId: null })
+      const result = deactivateTabs({ tabs: get().tabs, activeTabId: get().activeTabId })
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     pinTab: (id) => {
-      set((s) => {
-        const tab = s.tabs.find((t) => t.id === id)
-        if (!tab) return
-        tab.pinned = !tab.pinned
-        const pinned = s.tabs.filter((t) => t.pinned)
-        const unpinned = s.tabs.filter((t) => !t.pinned)
-        s.tabs = [...pinned, ...unpinned]
-      })
+      const result = togglePinned({ tabs: get().tabs, activeTabId: get().activeTabId }, id)
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     reorderTabs: (fromIdx, toIdx) => {
-      set((s) => {
-        const [moved] = s.tabs.splice(fromIdx, 1)
-        s.tabs.splice(toIdx, 0, moved)
-        const pinned = s.tabs.filter((t) => t.pinned)
-        const unpinned = s.tabs.filter((t) => !t.pinned)
-        s.tabs = [...pinned, ...unpinned]
-      })
+      const result = reduceReorderTabs(
+        { tabs: get().tabs, activeTabId: get().activeTabId },
+        fromIdx,
+        toIdx,
+      )
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     closeOtherTabs: (id) => {
-      const tab = get().tabs.find((t) => t.id === id)
-      if (!tab) return
-      set((s) => {
-        s.tabs = s.tabs.filter((t) => t.id === id || t.pinned)
-      })
-      const newActive = get().tabs.find((t) => t.id === id) ? id : get().tabs[0]?.id ?? null
-      set({ activeTabId: newActive, activeNoteId: newActive })
+      const current = { tabs: get().tabs, activeTabId: get().activeTabId }
+      const result = reduceCloseOtherTabs(current, id)
+      if (result === current) return
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
     closeUnpinnedTabs: () => {
-      set((s) => {
-        s.tabs = s.tabs.filter((t) => t.pinned)
-      })
-      const newActive = get().tabs[0]?.id ?? null
-      set({ activeTabId: newActive, activeNoteId: newActive })
+      const result = reduceCloseUnpinnedTabs({ tabs: get().tabs, activeTabId: get().activeTabId })
+      set({ tabs: result.tabs, activeTabId: result.activeTabId, activeNoteId: result.activeTabId })
       persistNotePrefs(get)
     },
 
@@ -349,10 +309,6 @@ export const useNoteStore = create<NoteStore>()(
       persistNotePrefs(get)
     },
 
-    setTocMaxLevel: (level) => {
-      set({ tocMaxLevel: Math.max(1, Math.min(6, level)) })
-      persistNotePrefs(get)
-    },
   }))
 )
 
@@ -361,7 +317,6 @@ function persistNotePrefs(get: () => NoteStore) {
     sortBy: get().sortBy,
     viewMode: get().viewMode,
     editorMode: get().editorMode,
-    tocMaxLevel: get().tocMaxLevel,
     tabs: get().tabs,
     activeTabId: get().activeTabId,
   })
