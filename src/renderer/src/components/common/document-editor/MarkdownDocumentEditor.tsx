@@ -85,7 +85,7 @@ export default function MarkdownDocumentEditor({
   const rootRef = useRef<HTMLDivElement>(null)
   const { showToast, ToastContainer } = useToast()
 
-  const { content, dirty, handleChange } = useDocumentPersistence({
+  const { content, contentRef, dirty, handleChange } = useDocumentPersistence({
     documentId: document.id,
     documentTitle: document.title,
     loadContent,
@@ -250,9 +250,10 @@ export default function MarkdownDocumentEditor({
 
   const handleExport = async (exportMode: ExportMode) => {
     try {
-      const persistedContent = await loadContent()
+      // 未保存的修改必须进 PDF；磁盘内容可能落后于编辑器
+      const currentContent = contentRef.current
       const html = await buildExportHtml({
-        content: persistedContent || '',
+        content: currentContent,
         mdFilePath: document.filePath,
         title: document.title,
         mode: exportMode,
