@@ -1,5 +1,9 @@
 allowBuilds:
-  electron-winstaller: set this to true or false
-  esbuild: set this to true or false
-  sharp: set this to true or false
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  sharp: true
+# electron-builder 无法可靠跟随 pnpm 默认软链布局收集产物依赖（sharp、
+# claude-agent-sdk 平台子包等），改用 npm 式提升布局；代价是失去幻影依赖隔离。
+nodeLinker: hoisted
 verifyDepsBeforeRun: false
