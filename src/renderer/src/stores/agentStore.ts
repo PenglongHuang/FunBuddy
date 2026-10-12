@@ -241,9 +241,18 @@ export const useAgentStore = create<AgentStore>()(
           }))
           const sorted = [...tasks].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
           set((s) => {
-            s.tasks = sorted
-            for (const t of sorted) s._messages[t.taskId] = []
-            s.activeTaskId = sorted[0]?.taskId ?? null
+            // hydrate 是异步的:await 期间用户本地创建的任务(含运行中的)不能被回填列表整体覆盖,
+            // 否则后续针对其 taskId 的 ingest() 会命中 `if (!t) return` 静默丢弃流式回复。
+            // 列表展示顺序由 AgentPanel 按 updatedAt 自行排序,这里只保证两边都不丢。
+            const restored = new Set(sorted.map((t) => t.taskId))
+            const locals = s.tasks.filter((t) => !restored.has(t.taskId))
+            s.tasks = [...locals, ...sorted]
+            // 只补缺失的消息数组,不清空已存在的——hydrate 期间到达的消息不丢
+            for (const t of sorted) if (!s._messages[t.taskId]) s._messages[t.taskId] = []
+            // 用户正在看的会话不被抢焦点;仅在当前 active 已不存在时才落到最新会话
+            if (!s.tasks.some((t) => t.taskId === s.activeTaskId)) {
+              s.activeTaskId = sorted[0]?.taskId ?? null
+            }
             s.hydrated = true
           })
         } finally {
