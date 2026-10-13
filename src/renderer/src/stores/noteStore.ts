@@ -18,6 +18,7 @@ import {
 } from './shared/tab-state'
 import {
   appendIndexRecord,
+  assertIndexWritable,
   deleteMarkdownDocument,
   moveMarkdownDocument,
 } from './shared/markdown-file-lifecycle'
@@ -26,6 +27,8 @@ import {
 interface NoteStore {
   notes: Note[]
   loaded: boolean
+  /** 索引读取/解析失败（非首次启动的 ENOENT）时为 true，UI 据此提示写入已锁定 */
+  loadFailed: boolean
   activeNoteId: string | null
   tabs: Tab[]
   activeTabId: string | null
@@ -61,6 +64,7 @@ export const useNoteStore = create<NoteStore>()(
   immer((set, get) => ({
     notes: [],
     loaded: false,
+    loadFailed: false,
     activeNoteId: null,
     tabs: [],
     activeTabId: null,
@@ -69,9 +73,27 @@ export const useNoteStore = create<NoteStore>()(
     editorMode: 'edit' as const,
 
     load: async () => {
+      let raw: string
       try {
-        const raw = await fs.readFile('notes/index.json')
-        const notes: Note[] = JSON.parse(raw)
+        raw = await fs.readFile('notes/index.json')
+      } catch (err) {
+        // 首次启动索引不存在：空列表是正常初始态；其余读取失败保持未加载并锁定索引写入
+        if (String((err as Error)?.message ?? err).includes('ENOENT')) {
+          set({ notes: [], loaded: true, loadFailed: false })
+        } else {
+          set({ notes: [], loaded: false, loadFailed: true })
+        }
+        return
+      }
+      let notes: Note[]
+      try {
+        notes = JSON.parse(raw.replace(/^\uFEFF/, ''))
+      } catch {
+        // 索引损坏：不得以空列表覆写，保持未加载
+        set({ notes: [], loaded: false, loadFailed: true })
+        return
+      }
+      try {
         const validNotes: Note[] = []
         for (const note of notes) {
           const exists = await fs.exists(note.filePath).catch(() => false)
@@ -107,9 +129,10 @@ export const useNoteStore = create<NoteStore>()(
             activeNoteId: validActiveTabId,
           })
         }
-        set({ notes: validNotes, loaded: true })
+        set({ notes: validNotes, loaded: true, loadFailed: false })
       } catch {
-        set({ notes: [], loaded: true })
+        // 解析成功后的修剪重写/偏好读取失败：同样视为未完成加载，锁定写入
+        set({ notes: [], loaded: false, loadFailed: true })
       }
     },
 
@@ -133,6 +156,7 @@ export const useNoteStore = create<NoteStore>()(
         await deleteMarkdownDocument(fs, imageApi, note.filePath)
       }
       set((s) => { s.notes = s.notes.filter((n) => n.id !== id) })
+      assertIndexWritable(get().loaded, '笔记')
       await fs.writeFile('notes/index.json', JSON.stringify(get().notes, null, 2))
       get().closeTab(id)
     },
@@ -146,6 +170,7 @@ export const useNoteStore = create<NoteStore>()(
         }
       }
       set((s) => { s.notes = s.notes.filter((n) => !idSet.has(n.id)) })
+      assertIndexWritable(get().loaded, '笔记')
       await fs.writeFile('notes/index.json', JSON.stringify(get().notes, null, 2))
       for (const id of ids) { get().closeTab(id) }
     },
@@ -169,6 +194,7 @@ export const useNoteStore = create<NoteStore>()(
         note.tags = tags
         note.updatedAt = new Date().toISOString()
       })
+      assertIndexWritable(get().loaded, '笔记')
       await fs.writeFile('notes/index.json', JSON.stringify(get().notes, null, 2))
     },
 
@@ -192,6 +218,7 @@ export const useNoteStore = create<NoteStore>()(
         const tab = s.tabs.find((t) => t.id === id)
         if (tab) tab.title = title
       })
+      assertIndexWritable(get().loaded, '笔记')
       await fs.writeFile('notes/index.json', JSON.stringify(get().notes, null, 2))
     },
 
@@ -206,6 +233,7 @@ export const useNoteStore = create<NoteStore>()(
           }
         }
       })
+      assertIndexWritable(get().loaded, '笔记')
       await fs.writeFile('notes/index.json', JSON.stringify(get().notes, null, 2))
     },
 
@@ -218,6 +246,7 @@ export const useNoteStore = create<NoteStore>()(
           }
         }
       })
+      assertIndexWritable(get().loaded, '笔记')
       await fs.writeFile('notes/index.json', JSON.stringify(get().notes, null, 2))
     },
 

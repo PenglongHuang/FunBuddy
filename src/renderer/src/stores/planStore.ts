@@ -18,6 +18,7 @@ import {
 } from './shared/tab-state'
 import {
   appendIndexRecord,
+  assertIndexWritable,
   deleteMarkdownDocument,
   moveMarkdownDocument,
 } from './shared/markdown-file-lifecycle'
@@ -70,6 +71,8 @@ function persistPlanPrefs(get: () => PlanStore) {
 interface PlanStore {
   plans: Plan[]
   loaded: boolean
+  /** 索引读取/解析失败（非首次启动的 ENOENT）时为 true，UI 据此提示写入已锁定 */
+  loadFailed: boolean
   activePlanId: string | null
   tabs: Tab[]
   activeTabId: string | null
@@ -108,6 +111,7 @@ export const usePlanStore = create<PlanStore>()(
   immer((set, get) => ({
     plans: [],
     loaded: false,
+    loadFailed: false,
     activePlanId: null,
     tabs: [],
     activeTabId: null,
@@ -117,9 +121,27 @@ export const usePlanStore = create<PlanStore>()(
     plannerView: 'list',
 
     load: async () => {
+      let raw: string
       try {
-        const raw = await fs.readFile('plans/index.json')
-        const plans: Plan[] = JSON.parse(raw)
+        raw = await fs.readFile('plans/index.json')
+      } catch (err) {
+        // 首次启动索引不存在：空列表是正常初始态；其余读取失败保持未加载并锁定索引写入
+        if (String((err as Error)?.message ?? err).includes('ENOENT')) {
+          set({ plans: [], loaded: true, loadFailed: false })
+        } else {
+          set({ plans: [], loaded: false, loadFailed: true })
+        }
+        return
+      }
+      let plans: Plan[]
+      try {
+        plans = JSON.parse(raw.replace(/^\uFEFF/, ''))
+      } catch {
+        // 索引损坏：不得以空列表覆写，保持未加载
+        set({ plans: [], loaded: false, loadFailed: true })
+        return
+      }
+      try {
         const validPlans: Plan[] = []
         for (const plan of plans) {
           if (!plan.planType) {
@@ -159,9 +181,10 @@ export const usePlanStore = create<PlanStore>()(
             activePlanId: validActiveTabId,
           })
         }
-        set({ plans: validPlans, loaded: true })
+        set({ plans: validPlans, loaded: true, loadFailed: false })
       } catch {
-        set({ plans: [], loaded: true })
+        // 解析成功后的修剪重写/偏好读取失败：同样视为未完成加载，锁定写入
+        set({ plans: [], loaded: false, loadFailed: true })
       }
     },
 
@@ -211,6 +234,7 @@ export const usePlanStore = create<PlanStore>()(
           if (tab) tab.title = updates.title
         }
       })
+      assertIndexWritable(get().loaded, '计划')
       await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
     },
 
@@ -220,6 +244,7 @@ export const usePlanStore = create<PlanStore>()(
         await deleteMarkdownDocument(fs, imageApi, plan.filePath)
       }
       set((s) => { s.plans = s.plans.filter((p) => p.id !== id) })
+      assertIndexWritable(get().loaded, '计划')
       await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
       get().closeTab(id)
     },
@@ -233,6 +258,7 @@ export const usePlanStore = create<PlanStore>()(
         }
       }
       set((s) => { s.plans = s.plans.filter((p) => !idSet.has(p.id)) })
+      assertIndexWritable(get().loaded, '计划')
       await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
       for (const id of ids) { get().closeTab(id) }
     },
@@ -267,6 +293,7 @@ export const usePlanStore = create<PlanStore>()(
         plan.tags = tags
         plan.updatedAt = new Date().toISOString()
       })
+      assertIndexWritable(get().loaded, '计划')
       await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
     },
 
@@ -281,6 +308,7 @@ export const usePlanStore = create<PlanStore>()(
           }
         }
       })
+      assertIndexWritable(get().loaded, '计划')
       await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
     },
 
@@ -293,6 +321,7 @@ export const usePlanStore = create<PlanStore>()(
           }
         }
       })
+      assertIndexWritable(get().loaded, '计划')
       await fs.writeFile('plans/index.json', JSON.stringify(get().plans, null, 2))
     },
 
