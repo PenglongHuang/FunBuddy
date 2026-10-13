@@ -25,9 +25,14 @@ export function unregisterHotkeys(): void {
 }
 
 function showQuickCapture(): void {
-  if (quickCaptureWin) {
+  // isDestroyed 守卫与 window.ts 的防御风格一致：'closed' 正常会清空引用，
+  // 这里防的是未来重构引入的销毁态残留（销毁态上调 show/send 会抛错）
+  if (quickCaptureWin && !quickCaptureWin.isDestroyed()) {
     quickCaptureWin.show()
     quickCaptureWin.focus()
+    // blur 只隐藏不销毁；复显时必须重发事件，否则渲染端不再收到通知，
+    // 旧文本残留、输入框失焦（dom-ready 上的发送只在首次创建时触发一次）
+    quickCaptureWin.webContents.send(IPC.HOTKEY_QUICK_CAPTURE)
     return
   }
 

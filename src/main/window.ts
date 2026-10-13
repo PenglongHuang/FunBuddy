@@ -2,6 +2,7 @@ import { BrowserWindow, screen, shell } from 'electron'
 import { join } from 'path'
 import { IPC } from '../shared/ipc-channels'
 import { logger } from './logger'
+import { getStore } from './store'
 
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
@@ -79,7 +80,10 @@ export function createMainWindow(): BrowserWindow {
   })
 
   mainWindow.on('close', (e) => {
-    if (!isQuitting) {
+    if (isQuitting) return
+    // 「关闭时最小化到托盘」设置（渲染端设置面板可切换）；未设置时默认保持托盘行为
+    const closeToTray = (getStore().get('settings.app.closeToTray') as boolean | undefined) ?? true
+    if (closeToTray) {
       e.preventDefault()
       mainWindow?.hide()
     }
