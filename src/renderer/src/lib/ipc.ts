@@ -88,11 +88,6 @@ export const hotkey = {
     window.api.hotkeyRegister(accelerator),
 }
 
-export const storeEvents = {
-  onDidChange: (callback: (key: string, newValue: unknown, oldValue: unknown) => void) =>
-    window.api.onStoreDidChange(callback),
-}
-
 export const petEvents = {
   onCursorHover: (callback: (hovered: boolean) => void) =>
     window.api.onPetCursorHover(callback),
@@ -118,8 +113,6 @@ export const imageApi = {
     window.api.imageSave(mdFilePath, imageData, ext, altName),
   pickAndSave: (mdFilePath: string) =>
     window.api.imagePickAndSave(mdFilePath),
-  deleteImage: (mdFilePath: string, imageFileName: string) =>
-    window.api.imageDelete(mdFilePath, imageFileName),
   cleanup: (mdFilePath: string) =>
     window.api.imageCleanup(mdFilePath),
   readAsDataUrl: (mdFilePath: string, imageFileName: string, maxWidth?: number) =>

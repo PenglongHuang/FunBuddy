@@ -2,7 +2,6 @@ export const IPC = {
   STORE_GET: 'store:get',
   STORE_SET: 'store:set',
   STORE_DELETE: 'store:delete',
-  STORE_ON_DID_CHANGE: 'store:onDidChange',
   FS_READ_FILE: 'fs:readFile',
   FS_WRITE_FILE: 'fs:writeFile',
   FS_DELETE_FILE: 'fs:deleteFile',
@@ -45,7 +44,6 @@ export const IPC = {
   // Image
   IMAGE_SAVE: 'image:save',
   IMAGE_PICK_AND_SAVE: 'image:pickAndSave',
-  IMAGE_DELETE: 'image:delete',
   IMAGE_CLEANUP: 'image:cleanup',
   IMAGE_READ_AS_DATA_URL: 'image:readAsDataUrl',
   IMAGE_MOVE_ASSETS: 'image:moveAssets',

@@ -37,11 +37,6 @@ function detectType(start: string, end: string | null): PlanType {
   return 'neutral'
 }
 
-function planColor(start: string, end: string | null, planType?: PlanType): string {
-  if (planType) return COLOR_MAP[planType]
-  return COLOR_MAP[detectType(start, end)]
-}
-
 function buildFilePath(id: string, slug: string, startDate: string, planType: PlanType, endDate: string | null): string {
   const [year, month, day] = startDate.split('-')
   switch (planType) {

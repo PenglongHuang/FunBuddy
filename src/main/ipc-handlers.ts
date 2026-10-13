@@ -1,7 +1,8 @@
 import { ipcMain, Notification, dialog, screen, app, BrowserWindow } from 'electron'
 import { readFile, writeFile, unlink, readdir, mkdir, rm, cp } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join, dirname, resolve, parse as parsePath } from 'path'
+import type { Dirent } from 'fs'
+import { join, dirname, resolve, relative, parse as parsePath } from 'path'
 import { tmpdir } from 'os'
 import { getStore } from './store'
 import { startTask, stopTask, getProviderInfo } from './claude-service'
@@ -10,9 +11,37 @@ import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode, star
 import { IPC } from '../shared/ipc-channels'
 import { registerHotkeys } from './hotkey'
 import { validatePath } from './path-guard'
+import { IMAGE_EXTENSIONS, collectOrphanImages } from './image-cleanup'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { logger } from './logger'
+
+/** 递归收集 notes/ 与 plans/ 下(除被删文档外)全部 .md 的内容;跳过 assets 子树,读不到的文档跳过。 */
+async function collectSurvivingDocContents(storageDir: string, deletedMdFilePath: string): Promise<string[]> {
+  const deletedAbs = resolve(storageDir, deletedMdFilePath)
+  const contents: string[] = []
+  async function walk(dir: string): Promise<void> {
+    let entries: Dirent[]
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (entry.name !== 'assets') await walk(full)
+      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
+        if (resolve(full) === deletedAbs) continue
+        try {
+          contents.push(await readFile(full, 'utf-8'))
+        } catch { /* 读不到的文档跳过 */ }
+      }
+    }
+  }
+  await Promise.all(['notes', 'plans'].map((category) => walk(validatePath(storageDir, category))))
+  return contents
+}
 
 export function registerIpcHandlers(): void {
   const store = getStore()
@@ -23,7 +52,6 @@ export function registerIpcHandlers(): void {
     return join(app.getPath('userData'), 'funbuddy-workspace')
   }
 
-  const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
   const IMAGE_MAX_SIZE = 10 * 1024 * 1024
 
   const dataUrlCache = new Map<string, { dataUrl: string; mimeType: string }>()
@@ -39,16 +67,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.STORE_GET, (_e, key: string) => store.get(key))
   ipcMain.handle(IPC.STORE_SET, (_e, key: string, value: unknown) => store.set(key, value))
   ipcMain.handle(IPC.STORE_DELETE, (_e, key: string) => store.delete(key))
-
-  // Store change listener
-  ipcMain.handle(IPC.STORE_ON_DID_CHANGE, (e) => {
-    const unsubscribe = store.onDidChange('settings' as any, (newValue, oldValue) => {
-      try {
-        e.sender.send(IPC.STORE_ON_DID_CHANGE, { key: 'settings', newValue, oldValue })
-      } catch { /* window may be closed */ }
-    })
-    return unsubscribe
-  })
 
   // FS (paths relative to storageDir)
   ipcMain.handle(IPC.FS_READ_FILE, async (_e, filePath: string) => {
@@ -395,12 +413,24 @@ export function registerIpcHandlers(): void {
     return saved[0]
   })
 
-  ipcMain.handle(IPC.IMAGE_DELETE, async () => {
-    // No-op: never delete images
-  })
-
-  ipcMain.handle(IPC.IMAGE_CLEANUP, async () => {
-    // No-op: never delete images
+  ipcMain.handle(IPC.IMAGE_CLEANUP, async (_e, mdFilePath: string) => {
+    // 文档删除前由渲染端调用:删除「仅被该文档引用」的孤儿图片,避免持续累积。
+    // 副本(duplicateNote 复制内容但不复制图片文件)与其他文档可能共享同一图片,
+    // 必须确认其余存活文档均不再引用才可删除。读取失败时静默跳过,不阻止文档删除。
+    const storageDir = getStorageDir()
+    let content: string
+    try {
+      content = await readFile(validatePath(storageDir, mdFilePath), 'utf-8')
+    } catch {
+      return
+    }
+    const otherContents = await collectSurvivingDocContents(storageDir, mdFilePath)
+    const { assetsDir } = getAssetsDir(mdFilePath)
+    for (const fileName of collectOrphanImages(content, otherContents)) {
+      try {
+        await unlink(validatePath(assetsDir, fileName))
+      } catch { /* 图片已不存在时忽略 */ }
+    }
   })
 
   ipcMain.handle(IPC.IMAGE_READ_AS_DATA_URL, async (_e, mdFilePath: string, imagePath: string, maxWidth?: number) => {
@@ -422,7 +452,11 @@ export function registerIpcHandlers(): void {
       if (existsSync(fallbackPath)) fullPath = fallbackPath
     }
 
-    if (!resolve(fullPath).startsWith(resolve(storageDir))) {
+    // fullPath 是拼好的绝对路径:先取相对路径再走 validatePath 做包含校验,
+    // 避免裸 startsWith 被兄弟前缀目录(如 /ws-extended)绕过。
+    try {
+      validatePath(storageDir, relative(storageDir, fullPath))
+    } catch {
       throw new Error('Invalid image path')
     }
 

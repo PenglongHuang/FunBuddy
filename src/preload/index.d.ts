@@ -4,7 +4,6 @@ export interface FunBuddyAPI {
   storeGet: (key: string) => Promise<unknown>
   storeSet: (key: string, value: unknown) => Promise<void>
   storeDelete: (key: string) => Promise<void>
-  onStoreDidChange: (callback: (key: string, newValue: unknown, oldValue: unknown) => void) => () => void
   fsReadFile: (filePath: string) => Promise<string>
   fsWriteFile: (filePath: string, content: string) => Promise<void>
   fsDeleteFile: (filePath: string) => Promise<void>
@@ -65,7 +64,6 @@ export interface FunBuddyAPI {
   // Image
   imageSave: (mdFilePath: string, imageData: ArrayBuffer, ext: string, altName?: string) => Promise<{ relativePath: string; fileName: string }>
   imagePickAndSave: (mdFilePath: string) => Promise<{ relativePath: string; fileName: string } | null>
-  imageDelete: (mdFilePath: string, imageFileName: string) => Promise<void>
   imageCleanup: (mdFilePath: string) => Promise<void>
   imageReadAsDataUrl: (mdFilePath: string, imageFileName: string, maxWidth?: number) => Promise<{ dataUrl: string; mimeType: string }>
   imageMoveAssets: (oldMdFilePath: string, newMdFilePath: string) => Promise<void>

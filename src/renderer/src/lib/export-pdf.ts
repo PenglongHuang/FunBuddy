@@ -11,6 +11,7 @@ import markdown from 'highlight.js/lib/languages/markdown'
 import { imageApi } from './ipc'
 import { escapeRawAngles } from './link-parser'
 import { escapeHtml } from './string-util'
+import { IMAGE_REF_REGEX } from '../../../shared/image-ref'
 
 // Register languages (same as MarkdownPreview)
 hljs.registerLanguage('javascript', javascript)
@@ -44,8 +45,6 @@ export interface ExportOptions {
     endDate?: string | null
   }
 }
-
-const IMAGE_REF_REGEX = /!\[[^\]]*\]\(([^)]*\/assets\/[^)]+)\)/g
 
 const CSS = `
 body {
