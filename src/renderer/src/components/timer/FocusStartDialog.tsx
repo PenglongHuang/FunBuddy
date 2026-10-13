@@ -4,6 +4,7 @@ import { X } from 'lucide-react'
 import { usePlanStore } from '@/stores/planStore'
 import { useTimerStore } from '@/stores/timerStore'
 import { formatFocusTime } from '@/lib/format-time'
+import useEscapeToCancel from '@/hooks/useEscapeToCancel'
 
 function formatShortDate(iso: string): string {
   const d = new Date(iso)
@@ -32,6 +33,8 @@ export default function FocusStartDialog({ onCancel }: FocusStartDialogProps) {
 
   const defaultPlanId = lastSelectedPlanId ?? null
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(defaultPlanId)
+
+  useEscapeToCancel(true, onCancel)
 
   const handleStart = () => {
     if (selectedPlanId) {

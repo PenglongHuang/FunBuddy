@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { FileDown, Loader2 } from 'lucide-react'
+import useEscapeToCancel from '@/hooks/useEscapeToCancel'
 import type { ExportMode } from '@/lib/export-pdf'
 
 interface ExportDialogProps {
@@ -12,6 +13,8 @@ interface ExportDialogProps {
 export default function ExportDialog({ open, onClose, onExport }: ExportDialogProps) {
   const [mode, setMode] = useState<ExportMode>('title-body')
   const [exporting, setExporting] = useState(false)
+
+  useEscapeToCancel(open && !exporting, onClose)
 
   const handleExport = async () => {
     setExporting(true)

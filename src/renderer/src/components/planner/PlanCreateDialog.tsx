@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { X } from 'lucide-react'
 import DatePicker from '@/components/common/DatePicker'
+import useEscapeToCancel from '@/hooks/useEscapeToCancel'
 import type { PlanType } from '@/types/plan'
 
 const PLAN_TYPE_OPTIONS: Array<{ key: PlanType; label: string }> = [
@@ -56,6 +57,8 @@ export default function PlanCreateDialog({ onConfirm, onCancel }: PlanCreateDial
   const [weekStart, setWeekStart] = useState(weekBounds.start)
   const [weekEnd, setWeekEnd] = useState(weekBounds.end)
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth)
+
+  useEscapeToCancel(true, onCancel)
 
   const placeholder = useMemo(() => {
     switch (planType) {
