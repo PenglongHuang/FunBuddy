@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react'
+import DOMPurify from 'dompurify'
 import { marked, type Tokens } from 'marked'
 import hljs from 'highlight.js/lib/core'
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -13,6 +14,7 @@ import { imageApi } from '@/lib/ipc'
 import { parseLinks, replaceLinksWithHtml, maskCodeBlocks, escapeRawAngles } from '@/lib/link-parser'
 import { resolveLinks } from '@/lib/link-resolver'
 import { renderCodeBlock } from '@/lib/code-block'
+import { renderMarkdownImage } from '@/lib/markdown-image-renderer'
 import { escapeHtml } from '@/lib/string-util'
 
 hljs.registerLanguage('javascript', javascript)
@@ -118,22 +120,12 @@ export default function MarkdownPreview({ content, streaming, mdFilePath, onLink
 
     r.code = codeRenderer.code.bind(codeRenderer)
 
-    r.image = function ({ href, title, text }: Tokens.Image) {
-      const isLocalAsset = href?.includes('/assets/')
-      if (isLocalAsset && imageMap[href]) {
-        return `<img src="${imageMap[href]}" alt="${text || ''}" ${title ? `title="${title}"` : ''} style="max-width:100%;border-radius:var(--radius-sm)">`
-      }
-      if (isLocalAsset && !imageMap[href]) {
-        const fileName = href.split('/').pop() || href
-        return `<div style="padding:8px 12px;background:rgba(255,255,255,0.05);border-radius:var(--radius-sm);color:var(--text-tertiary);font-size:12px;text-align:center">图片未找到: ${text || fileName}</div>`
-      }
-      return `<img src="${href || ''}" alt="${text || ''}" ${title ? `title="${title}"` : ''} style="max-width:100%;border-radius:var(--radius-sm)">`
-    }
+    r.image = (token: Tokens.Image) => renderMarkdownImage(token, imageMap)
 
     if (linkTarget === '_blank') {
       r.link = function ({ href, title, text }) {
-        const t = title ? ` title="${title}"` : ''
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer"${t}>${text}</a>`
+        const t = title ? ` title="${escapeHtml(title)}"` : ''
+        return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"${t}>${text}</a>`
       }
     }
 
@@ -149,7 +141,11 @@ export default function MarkdownPreview({ content, streaming, mdFilePath, onLink
 
   const html = useMemo(() => {
     marked.use({ renderer, gfm: true, breaks: true })
-    return marked.parse(escapeRawAngles(processedContent), { async: false }) as string
+    const raw = marked.parse(escapeRawAngles(processedContent), { async: false }) as string
+    // 纵深防御：escapeRawAngles 有意放行合法形态的 HTML 标签，最终产物必须过 DOMPurify。
+    // DOMPurify 在 node 测试环境（无 window）不生效——生产渲染器始终有 window；
+    // isSupported=false 时回退原文，保证纵深防御只在真实 DOM 环境启用。
+    return DOMPurify.isSupported ? DOMPurify.sanitize(raw, { ADD_ATTR: ['target'] }) : raw
   }, [processedContent, renderer])
 
   const handleClick = useCallback((e: React.MouseEvent) => {

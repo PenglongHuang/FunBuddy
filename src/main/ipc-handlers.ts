@@ -9,6 +9,7 @@ import { listAgentSessions, getAgentSessionMessages, deleteAgentSession } from '
 import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode, startPetCursorTracking, stopPetCursorTracking, setPetDragging, movePetDrag, toggleAlwaysOnTop } from './window'
 import { IPC } from '../shared/ipc-channels'
 import { registerHotkeys } from './hotkey'
+import { validatePath } from './path-guard'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { logger } from './logger'
@@ -26,14 +27,6 @@ export function registerIpcHandlers(): void {
   const IMAGE_MAX_SIZE = 10 * 1024 * 1024
 
   const dataUrlCache = new Map<string, { dataUrl: string; mimeType: string }>()
-
-  function validatePath(dir: string, filePath: string): string {
-    const fullPath = resolve(dir, filePath)
-    if (!fullPath.startsWith(resolve(dir))) {
-      throw new Error('Invalid path')
-    }
-    return fullPath
-  }
 
   function getAssetsDir(mdFilePath: string): { dir: string; assetsDir: string } {
     const dir = getStorageDir()
@@ -59,25 +52,21 @@ export function registerIpcHandlers(): void {
 
   // FS (paths relative to storageDir)
   ipcMain.handle(IPC.FS_READ_FILE, async (_e, filePath: string) => {
-    const dir = getStorageDir()
-    return readFile(join(dir, filePath), 'utf-8')
+    return readFile(validatePath(getStorageDir(), filePath), 'utf-8')
   })
 
   ipcMain.handle(IPC.FS_WRITE_FILE, async (_e, filePath: string, content: string) => {
-    const dir = getStorageDir()
-    const fullPath = join(dir, filePath)
+    const fullPath = validatePath(getStorageDir(), filePath)
     await mkdir(dirname(fullPath), { recursive: true })
     return writeFile(fullPath, content, 'utf-8')
   })
 
   ipcMain.handle(IPC.FS_DELETE_FILE, async (_e, filePath: string) => {
-    const dir = getStorageDir()
-    return unlink(join(dir, filePath))
+    return unlink(validatePath(getStorageDir(), filePath))
   })
 
   ipcMain.handle(IPC.FS_READ_DIR, async (_e, dirPath: string) => {
-    const base = getStorageDir()
-    const fullDir = join(base, dirPath)
+    const fullDir = validatePath(getStorageDir(), dirPath)
     try {
       const entries = await readdir(fullDir, { withFileTypes: true })
       return entries.filter((e) => e.isFile()).map((e) => e.name)
@@ -87,13 +76,11 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.FS_EXISTS, (_e, filePath: string) => {
-    const dir = getStorageDir()
-    return existsSync(join(dir, filePath))
+    return existsSync(validatePath(getStorageDir(), filePath))
   })
 
   ipcMain.handle(IPC.FS_MKDIR, async (_e, dirPath: string) => {
-    const base = getStorageDir()
-    return mkdir(join(base, dirPath), { recursive: true })
+    return mkdir(validatePath(getStorageDir(), dirPath), { recursive: true })
   })
 
   ipcMain.handle(IPC.FS_GET_STORAGE_DIR, () => {
@@ -240,17 +227,26 @@ export function registerIpcHandlers(): void {
     return result.canceled ? null : result.filePaths[0]
   })
 
+  // 保存对话框选定过的路径，作为 FS_WRITE_FILE_ABSOLUTE 的一次性令牌
+  const saveDialogPaths = new Set<string>()
+
   ipcMain.handle(IPC.DIALOG_SHOW_SAVE_DIALOG, async (_e, options: Electron.SaveDialogOptions) => {
     const result = await withForegroundDialog(() => dialog.showSaveDialog(options))
-    return result.canceled ? null : result.filePath
+    const filePath = result.canceled ? null : result.filePath
+    if (filePath) saveDialogPaths.add(filePath)
+    return filePath
   })
 
   ipcMain.handle(IPC.DIALOG_SHOW_MESSAGE_BOX, async (_e, options: Electron.MessageBoxOptions) => {
     return withForegroundDialog(() => dialog.showMessageBox(options))
   })
 
-  // FS absolute path write (for exports)
+  // FS absolute path write (for exports) — 仅限本次会话中用户经保存对话框明确选定的路径，且令牌一次性
   ipcMain.handle(IPC.FS_WRITE_FILE_ABSOLUTE, async (_e, filePath: string, content: string) => {
+    if (!saveDialogPaths.has(filePath)) {
+      throw new Error('绝对路径写入仅限本次会话中通过保存对话框选择的路径')
+    }
+    saveDialogPaths.delete(filePath)
     await mkdir(dirname(filePath), { recursive: true })
     return writeFile(filePath, content, 'utf-8')
   })
