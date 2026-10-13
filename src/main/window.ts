@@ -1,6 +1,7 @@
 import { BrowserWindow, screen, shell } from 'electron'
 import { join } from 'path'
 import { IPC } from '../shared/ipc-channels'
+import { destroyQuickCapture } from './hotkey'
 import { logger } from './logger'
 import { getStore } from './store'
 
@@ -86,6 +87,11 @@ export function createMainWindow(): BrowserWindow {
     if (closeToTray) {
       e.preventDefault()
       mainWindow?.hide()
+    } else {
+      // 真关闭分支:主窗销毁后必须连带销毁隐藏中的快捷捕捉窗。它若存活,
+      // window-all-closed 永不触发,且托盘 getAllWindows()[0] 会解析到捕捉窗(300×160),
+      // 显示错窗、主窗直至重启无法恢复。hide 分支不调用——那是正常的托盘驻留。
+      destroyQuickCapture()
     }
   })
 

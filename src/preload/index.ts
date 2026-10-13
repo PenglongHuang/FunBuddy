@@ -6,6 +6,7 @@ const api = {
   storeGet: (key: string) => ipcRenderer.invoke(IPC.STORE_GET, key),
   storeSet: (key: string, value: unknown) => ipcRenderer.invoke(IPC.STORE_SET, key, value),
   storeDelete: (key: string) => ipcRenderer.invoke(IPC.STORE_DELETE, key),
+  storeSetStorageDir: (dir: string) => ipcRenderer.invoke(IPC.STORE_SET_STORAGE_DIR, dir),
 
   // FS
   fsReadFile: (filePath: string) => ipcRenderer.invoke(IPC.FS_READ_FILE, filePath),

@@ -2,6 +2,7 @@ export const IPC = {
   STORE_GET: 'store:get',
   STORE_SET: 'store:set',
   STORE_DELETE: 'store:delete',
+  STORE_SET_STORAGE_DIR: 'store:setStorageDir',
   FS_READ_FILE: 'fs:readFile',
   FS_WRITE_FILE: 'fs:writeFile',
   FS_DELETE_FILE: 'fs:deleteFile',

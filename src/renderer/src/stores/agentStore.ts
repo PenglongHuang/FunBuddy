@@ -230,7 +230,8 @@ export const useAgentStore = create<AgentStore>()(
               sessions = []
             }
           }
-          const tasks: AgentTask[] = sessions.map((sess) => ({
+          // 回填条目恒为 live 态;标成收窄类型让下方按 sessionId 去重可直接访问 t.sessionId
+          const tasks: Extract<AgentTask, { phase: 'live' }>[] = sessions.map((sess) => ({
             phase: 'live',
             taskId: sess.sessionId, // live 态直接用 sessionId 当 taskId,简化映射
             sessionId: sess.sessionId,
@@ -244,14 +245,21 @@ export const useAgentStore = create<AgentStore>()(
             // hydrate 是异步的:await 期间用户本地创建的任务(含运行中的)不能被回填列表整体覆盖,
             // 否则后续针对其 taskId 的 ingest() 会命中 `if (!t) return` 静默丢弃流式回复。
             // 列表展示顺序由 AgentPanel 按 updatedAt 自行排序,这里只保证两边都不丢。
-            const restored = new Set(sorted.map((t) => t.taskId))
+            // await 期间本地任务可能已经 ingest(init) 升级 live(taskId 仍是 nanoid,
+            // sessionId 指向 CLI 会话)。回填列表里同 sessionId 的条目与之是同一会话,
+            // 并存会造成一会话显示两份——按 sessionId 去重,保留本地那份(消息正在流式)。
+            const localLiveSessionIds = new Set(
+              s.tasks.flatMap((t) => (t.phase === 'live' ? [t.sessionId] : [])),
+            )
+            const deduped = sorted.filter((t) => !localLiveSessionIds.has(t.sessionId))
+            const restored = new Set(deduped.map((t) => t.taskId))
             const locals = s.tasks.filter((t) => !restored.has(t.taskId))
-            s.tasks = [...locals, ...sorted]
+            s.tasks = [...locals, ...deduped]
             // 只补缺失的消息数组,不清空已存在的——hydrate 期间到达的消息不丢
-            for (const t of sorted) if (!s._messages[t.taskId]) s._messages[t.taskId] = []
+            for (const t of deduped) if (!s._messages[t.taskId]) s._messages[t.taskId] = []
             // 用户正在看的会话不被抢焦点;仅在当前 active 已不存在时才落到最新会话
             if (!s.tasks.some((t) => t.taskId === s.activeTaskId)) {
-              s.activeTaskId = sorted[0]?.taskId ?? null
+              s.activeTaskId = deduped[0]?.taskId ?? null
             }
             s.hydrated = true
           })

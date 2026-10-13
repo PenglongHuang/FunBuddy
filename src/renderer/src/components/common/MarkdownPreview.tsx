@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react'
-import DOMPurify from 'dompurify'
 import { marked, type Tokens } from 'marked'
 import hljs from 'highlight.js/lib/core'
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -11,6 +10,7 @@ import bash from 'highlight.js/lib/languages/bash'
 import xml from 'highlight.js/lib/languages/xml'
 import markdown from 'highlight.js/lib/languages/markdown'
 import { imageApi } from '@/lib/ipc'
+import { sanitizeMarkdownHtml } from '@/lib/markdown-sanitize'
 import { parseLinks, replaceLinksWithHtml, maskCodeBlocks, escapeRawAngles } from '@/lib/link-parser'
 import { resolveLinks } from '@/lib/link-resolver'
 import { renderCodeBlock } from '@/lib/code-block'
@@ -142,10 +142,7 @@ export default function MarkdownPreview({ content, streaming, mdFilePath, onLink
   const html = useMemo(() => {
     marked.use({ renderer, gfm: true, breaks: true })
     const raw = marked.parse(escapeRawAngles(processedContent), { async: false }) as string
-    // 纵深防御：escapeRawAngles 有意放行合法形态的 HTML 标签，最终产物必须过 DOMPurify。
-    // DOMPurify 在 node 测试环境（无 window）不生效——生产渲染器始终有 window；
-    // isSupported=false 时回退原文，保证纵深防御只在真实 DOM 环境启用。
-    return DOMPurify.isSupported ? DOMPurify.sanitize(raw, { ADD_ATTR: ['target'] }) : raw
+    return sanitizeMarkdownHtml(raw)
   }, [processedContent, renderer])
 
   const handleClick = useCallback((e: React.MouseEvent) => {

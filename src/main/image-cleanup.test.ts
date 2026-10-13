@@ -41,4 +41,21 @@ describe('collectOrphanImages', () => {
     const a = '![a](./assets/imgs\\sub\\x.png)\n'
     expect(collectOrphanImages(a, [])).toEqual(['x.png'])
   })
+
+  it('alt 含 ] 的存活引用计入存活集合 → 图片不被误删', () => {
+    // 编辑器以 ![${altText}](path) 插入,alt 可被编辑含 `]`;
+    // 清理端正则对这类引用失明会物理删除仍被引用的图片。
+    const survivor = '![caption with ] bracket](./assets/imgs/20260101-abcd.png)\n'
+    expect(collectOrphanImages(A_WITH_X, [survivor])).toEqual([])
+  })
+
+  it('alt 含 ] 的被删文档引用计入候选 → 孤儿图片仍可删除', () => {
+    const a = '![a]b](./assets/imgs/gone.png)\n'
+    expect(collectOrphanImages(a, [])).toEqual(['gone.png'])
+  })
+
+  it('alt 含 ] 与普通引用混排 → 逐条独立提取互不吞并', () => {
+    const a = '![1](./assets/imgs/x1.png)\n![al]t](./assets/imgs/x2.png)\n![3](./assets/imgs/x3.png)\n'
+    expect(collectOrphanImages(a, [])).toEqual(['x1.png', 'x2.png', 'x3.png'])
+  })
 })

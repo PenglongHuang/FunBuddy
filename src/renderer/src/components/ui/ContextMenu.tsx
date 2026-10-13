@@ -159,8 +159,20 @@ export default function ContextMenu({ items, anchorRect, onClose }: ContextMenuP
         onClose()
       }
     }
+    // 与 Dropdown 一致的 document 级处理:菜单只在挂载期间存在(父组件条件渲染),
+    // 打开时 Escape 关菜单并 stopPropagation,阻止 App 的全局监听把应用折叠成宠物模式
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
+    }
     document.addEventListener('click', handleClick)
-    return () => document.removeEventListener('click', handleClick)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('click', handleClick)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
   }, [onClose])
 
   const vw = window.innerWidth

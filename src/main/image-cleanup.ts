@@ -3,7 +3,8 @@ import { IMAGE_REF_REGEX } from '../shared/image-ref'
 /** 图片扩展名白名单(IMAGE_SAVE / IMAGE_PICK_AND_SAVE 生成的文件)。 */
 export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
 
-function extractImageFileNames(content: string): Set<string> {
+/** 提取文档内容引用的全部图片 basename（IMAGE_CLEANUP 借此在被删文档无图片时跳过全库扫描）。 */
+export function extractImageFileNames(content: string): Set<string> {
   const refs = [...content.matchAll(IMAGE_REF_REGEX)].map((m) => m[1])
   const names = refs.map((ref) => ref.replace(/\\/g, '/').split('/').pop() || '')
   return new Set(names.filter((name) => IMAGE_EXTENSIONS.includes(name.split('.').pop()?.toLowerCase() || '')))

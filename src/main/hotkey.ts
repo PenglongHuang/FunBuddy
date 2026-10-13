@@ -24,6 +24,16 @@ export function unregisterHotkeys(): void {
   globalShortcut.unregisterAll()
 }
 
+/** 立即销毁快捷捕捉窗(若处于隐藏存活态)。
+ *  主窗真关闭时必须调用:捕捉窗存活会让 window-all-closed 永不触发(应用进程挂着),
+ *  且托盘的「操作面板」/点击用 BrowserWindow.getAllWindows()[0] 找主窗,会解析到这个
+ *  300×160 的捕捉窗——显示错窗,主窗直至重启无法恢复。
+ */
+export function destroyQuickCapture(): void {
+  quickCaptureWin?.destroy()
+  quickCaptureWin = null
+}
+
 function showQuickCapture(): void {
   // isDestroyed 守卫与 window.ts 的防御风格一致：'closed' 正常会清空引用，
   // 这里防的是未来重构引入的销毁态残留（销毁态上调 show/send 会抛错）

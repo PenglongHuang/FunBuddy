@@ -5,6 +5,9 @@ export const store = {
     window.api.storeSet(key, value),
   delete: (key: string): Promise<void> =>
     window.api.storeDelete(key),
+  // 工作区切换走特权通道:主进程只接受本会话对话框选定/历史列表中的路径
+  setStorageDir: (dir: string): Promise<void> =>
+    window.api.storeSetStorageDir(dir),
 }
 
 export const fs = {

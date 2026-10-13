@@ -14,7 +14,9 @@ export default function ExportDialog({ open, onClose, onExport }: ExportDialogPr
   const [mode, setMode] = useState<ExportMode>('title-body')
   const [exporting, setExporting] = useState(false)
 
-  useEscapeToCancel(open && !exporting, onClose)
+  // 导出中禁取消,但必须保留捕获监听吞掉 Escape:若整个不注册,
+  // Escape 会直达 App 全局监听把应用折叠成宠物模式,悬着的保存对话框状态随之丢失
+  useEscapeToCancel(open, exporting ? () => undefined : onClose)
 
   const handleExport = async () => {
     setExporting(true)

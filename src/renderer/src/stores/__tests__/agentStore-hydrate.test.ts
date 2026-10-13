@@ -101,4 +101,32 @@ describe('agentStore hydrate 与本地任务的竞态', () => {
       { role: 'assistant', text: '流式中', toolUses: [] },
     ])
   })
+
+  it('hydrate 挂起期间本地任务升级 live 后,回填的同 sessionId 条目不与其并存', async () => {
+    // 竞态:hydrate 的 listSessions 挂起期间,本地任务经 ingest(init) 升级 live
+    // (taskId 仍是 nanoid,sessionId 指向 CLI 会话)。回填项 taskId=sessionId,
+    // 与本地任务互不同 id 却是同一会话——必须按 sessionId 去重,保留本地那份。
+    let resolveList: (v: any) => void = () => {}
+    vi.mocked(ai.listSessions).mockReturnValueOnce(
+      new Promise((r) => { resolveList = r }),
+    )
+    useAgentStore.getState().setDefaultWorkspace('/ws')
+
+    const p = useAgentStore.getState().hydrate()
+    const localTaskId = useAgentStore.getState().createTask('新会话', '/ws')
+    useAgentStore.getState().sendPrompt(localTaskId, '你好')
+    // CLI 流回 init:本地任务升级 live,绑定 sessionId 's1'
+    useAgentStore.getState().ingest(localTaskId, {
+      role: 'system', kind: 'init', meta: { sessionId: 's1' },
+    })
+    expect(useAgentStore.getState().tasks.find((t) => t.taskId === localTaskId)?.phase).toBe('live')
+
+    resolveList([{ sessionId: 's1', summary: '同一会话', lastModified: 1, cwd: '/ws' }])
+    await p
+
+    const tasks = useAgentStore.getState().tasks
+    // 同一 sessionId 只显示一份,且是本地那份(nanoid taskId,流式消息挂在它上面)
+    expect(tasks.filter((t) => t.phase === 'live' && t.sessionId === 's1')).toHaveLength(1)
+    expect(tasks.some((t) => t.taskId === localTaskId)).toBe(true)
+  })
 })

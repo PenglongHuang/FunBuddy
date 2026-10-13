@@ -4,6 +4,7 @@ export interface FunBuddyAPI {
   storeGet: (key: string) => Promise<unknown>
   storeSet: (key: string, value: unknown) => Promise<void>
   storeDelete: (key: string) => Promise<void>
+  storeSetStorageDir: (dir: string) => Promise<void>
   fsReadFile: (filePath: string) => Promise<string>
   fsWriteFile: (filePath: string, content: string) => Promise<void>
   fsDeleteFile: (filePath: string) => Promise<void>

@@ -168,10 +168,19 @@ export function markdownDocumentParts<T extends MarkdownDocumentMeta, S extends 
         const valid: T[] = []
         for (const entity of entities) {
           const normalized = config.normalize ? config.normalize(entity) : entity
-          const exists = await fs.exists(normalized.filePath).catch(() => false)
+          // exists 无法判定（IPC 层异常）时保守保留记录：修剪只应删「确认不存在」的，
+          // 假阴性会连带触发下方「全部查无文件」分支，把完好记录清出索引。
+          const exists = await fs.exists(normalized.filePath).catch(() => true)
           if (exists) valid.push({ ...normalized, tags: normalized.tags ?? [] })
         }
-        if (valid.length !== entities.length) {
+        if (valid.length === 0 && entities.length > 0) {
+          // 索引有记录但全部「查无文件」：大概率是 exists 假阴性（EACCES/网络盘/AV 锁）
+          // 或异常状态。拒绝修剪到空覆写索引——否则后续 create 会向空索引追加，
+          // 原始记录被永久覆盖。保持未加载并锁定写入，让失败横幅接管。
+          set(patch({ [listKey]: [], loaded: false, loadFailed: true }))
+          return
+        }
+        if (0 < valid.length && valid.length < entities.length) {
           await fs.writeFile(indexPath, JSON.stringify(valid, null, 2))
         }
         const prefs = await store.get<{

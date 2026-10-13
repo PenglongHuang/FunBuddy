@@ -252,6 +252,52 @@ describe('markdownDocumentParts.load 失败安全', () => {
     expect(JSON.parse(fake.files.get(INDEX_PATH) ?? '[]')).toEqual([keep])
   })
 
+  it('exists 全部 reject（IPC 层异常）→ 保守保留全部记录，不修剪写盘，loaded 正常', async () => {
+    const d1 = makeDoc('d1', 'Alpha')
+    const d2 = makeDoc('d2', 'Beta')
+    fake.files.set(d1.filePath, '# Alpha')
+    fake.files.set(d2.filePath, '# Beta')
+    fake.files.set(INDEX_PATH, JSON.stringify([d1, d2]))
+    fake.fs.exists.mockRejectedValueOnce(new Error('ipc broken'))
+    fake.fs.exists.mockRejectedValueOnce(new Error('ipc broken'))
+    await useTestStore.getState().load()
+    const s = useTestStore.getState()
+    expect(s.docs).toEqual([d1, d2])
+    expect(s.loaded).toBe(true)
+    expect(s.loadFailed).toBe(false)
+    expect(fake.files.get(INDEX_PATH)).toBe(JSON.stringify([d1, d2]))
+    expect(fake.fs.writeFile).not.toHaveBeenCalled()
+  })
+
+  it('索引有记录但全部「查无文件」→ 拒绝修剪到空：不写盘、loadFailed 锁定', async () => {
+    const d1 = makeDoc('d1', 'Alpha')
+    const d2 = makeDoc('d2', 'Beta')
+    // 不写入任何 .md：exists 对两条记录均返回 false（模拟 EACCES 等假阴性）
+    fake.files.set(INDEX_PATH, JSON.stringify([d1, d2]))
+    await useTestStore.getState().load()
+    const s = useTestStore.getState()
+    expect(s.docs).toEqual([])
+    expect(s.loaded).toBe(false)
+    expect(s.loadFailed).toBe(true)
+    expect(fake.files.get(INDEX_PATH)).toBe(JSON.stringify([d1, d2]))
+    expect(fake.fs.writeFile).not.toHaveBeenCalled()
+  })
+
+  it('3 条记录仅 1 条缺失 → 正常修剪为 2 条并写盘（守卫不扩大化）', async () => {
+    const keep1 = makeDoc('d1', 'Alpha')
+    const keep2 = makeDoc('d2', 'Beta')
+    const gone = makeDoc('gone', 'Ghost')
+    fake.files.set(keep1.filePath, '# Alpha')
+    fake.files.set(keep2.filePath, '# Beta')
+    fake.files.set(INDEX_PATH, JSON.stringify([keep1, keep2, gone]))
+    await useTestStore.getState().load()
+    const s = useTestStore.getState()
+    expect(s.docs).toEqual([keep1, keep2])
+    expect(s.loaded).toBe(true)
+    expect(s.loadFailed).toBe(false)
+    expect(JSON.parse(fake.files.get(INDEX_PATH) ?? '[]')).toEqual([keep1, keep2])
+  })
+
   it('偏好恢复：过滤失效 tab、刷新标题、activeId 与 activeTabId 同步', async () => {
     const doc = { ...makeDoc('d1', '新标题'), tags: ['t'] }
     fake.files.set(doc.filePath, '# x')

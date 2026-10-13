@@ -11,35 +11,40 @@ import { resizeWindow, getMainWindow, expandToPanelMode, collapseToPetMode, star
 import { IPC } from '../shared/ipc-channels'
 import { registerHotkeys } from './hotkey'
 import { validatePath } from './path-guard'
-import { IMAGE_EXTENSIONS, collectOrphanImages } from './image-cleanup'
+import { assertNonPrivilegedStoreKey, assertWritableExtension } from './ipc-guards'
+import { IMAGE_EXTENSIONS, collectOrphanImages, extractImageFileNames } from './image-cleanup'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
 import { logger } from './logger'
 
-/** 递归收集 notes/ 与 plans/ 下(除被删文档外)全部 .md 的内容;跳过 assets 子树,读不到的文档跳过。 */
+/**
+ * 递归收集 notes/ 与 plans/ 下(除被删文档外)全部 .md 的内容;跳过 assets 子树。
+ * 任何读取失败都向上抛出以中止整个清理:引用计数不完整时继续删除,
+ * 可能误删仍被「读不到的那篇/那棵子树」引用的共享图片。孤儿可留,共享图不可误删。
+ */
 async function collectSurvivingDocContents(storageDir: string, deletedMdFilePath: string): Promise<string[]> {
   const deletedAbs = resolve(storageDir, deletedMdFilePath)
   const contents: string[] = []
   async function walk(dir: string): Promise<void> {
-    let entries: Dirent[]
-    try {
-      entries = await readdir(dir, { withFileTypes: true })
-    } catch {
-      return
-    }
+    // 目录读不出(权限/IO 错误)时抛出中止;不静默跳过任何子树
+    const entries: Dirent[] = await readdir(dir, { withFileTypes: true })
     for (const entry of entries) {
       const full = join(dir, entry.name)
       if (entry.isDirectory()) {
         if (entry.name !== 'assets') await walk(full)
       } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
         if (resolve(full) === deletedAbs) continue
-        try {
-          contents.push(await readFile(full, 'utf-8'))
-        } catch { /* 读不到的文档跳过 */ }
+        // 单篇读不到同样中止:该篇的图片引用无从计数,删除可能误删它独占的图
+        contents.push(await readFile(full, 'utf-8'))
       }
     }
   }
-  await Promise.all(['notes', 'plans'].map((category) => walk(validatePath(storageDir, category))))
+  await Promise.all(['notes', 'plans'].map(async (category) => {
+    const dir = validatePath(storageDir, category)
+    // 分类目录整体不存在 = 该类确定无存活文档,视作空集;存在但读失败则由 walk 抛出中止
+    if (!existsSync(dir)) return
+    await walk(dir)
+  }))
   return contents
 }
 
@@ -65,7 +70,13 @@ export function registerIpcHandlers(): void {
 
   // Store
   ipcMain.handle(IPC.STORE_GET, (_e, key: string) => store.get(key))
-  ipcMain.handle(IPC.STORE_SET, (_e, key: string, value: unknown) => store.set(key, value))
+  ipcMain.handle(IPC.STORE_SET, (_e, key: string, value: unknown) => {
+    // 渲染端不得直写特权键(含其祖先/后代形态):storageDir 决定全部 FS_* 通道的
+    // 文件系统边界,直写等于让受损渲染器把工作区指向任意目录。切换必须走
+    // STORE_SET_STORAGE_DIR 令牌通道。详见 src/main/ipc-guards.ts。
+    assertNonPrivilegedStoreKey(key)
+    return store.set(key, value)
+  })
   ipcMain.handle(IPC.STORE_DELETE, (_e, key: string) => store.delete(key))
 
   // FS (paths relative to storageDir)
@@ -75,6 +86,9 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.FS_WRITE_FILE, async (_e, filePath: string, content: string) => {
     const fullPath = validatePath(getStorageDir(), filePath)
+    // 纵深防御:限制受损渲染器的写入面——工作区内只允许 Markdown 文档与 JSON 索引,
+    // 即便工作区被指到敏感目录也写不进可执行文件。详见 src/main/ipc-guards.ts。
+    assertWritableExtension(fullPath)
     await mkdir(dirname(fullPath), { recursive: true })
     return writeFile(fullPath, content, 'utf-8')
   })
@@ -240,9 +254,31 @@ export function registerIpcHandlers(): void {
     }
   }
 
+  // 记录「目录选择对话框」选定过的工作区路径，作为 STORE_SET_STORAGE_DIR 的会话令牌
+  const pickedDirTokens = new Set<string>()
+
   ipcMain.handle(IPC.DIALOG_OPEN_DIRECTORY, async () => {
     const result = await withForegroundDialog(() => dialog.showOpenDialog({ properties: ['openDirectory'] }))
-    return result.canceled ? null : result.filePaths[0]
+    const dir = result.canceled ? null : result.filePaths[0]
+    if (dir) pickedDirTokens.add(dir)
+    return dir
+  })
+
+  // 工作区切换(特权):复用 saveDialogPaths 的令牌模式——只接受「本会话经
+  // DIALOG_OPEN_DIRECTORY 返回、未消费」的路径，或主进程持久化历史
+  // (settings.storageDirHistory，渲染端不可直写)中已有的路径；令牌一次性消费。
+  ipcMain.handle(IPC.STORE_SET_STORAGE_DIR, (_e, dir: string) => {
+    if (typeof dir !== 'string' || !dir) {
+      throw new Error('Invalid storage dir')
+    }
+    const history = (store.get('settings.storageDirHistory') as string[] | undefined) ?? []
+    if (pickedDirTokens.has(dir)) {
+      pickedDirTokens.delete(dir)
+    } else if (!history.includes(dir)) {
+      throw new Error('工作区路径必须是本次会话中通过目录选择对话框选定，或位于最近使用列表中')
+    }
+    store.set('settings.storageDir', dir)
+    store.set('settings.storageDirHistory', [dir, ...history.filter((d) => d !== dir)].slice(0, 5))
   })
 
   // 保存对话框选定过的路径，作为 FS_WRITE_FILE_ABSOLUTE 的一次性令牌
@@ -416,7 +452,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.IMAGE_CLEANUP, async (_e, mdFilePath: string) => {
     // 文档删除前由渲染端调用:删除「仅被该文档引用」的孤儿图片,避免持续累积。
     // 副本(duplicateNote 复制内容但不复制图片文件)与其他文档可能共享同一图片,
-    // 必须确认其余存活文档均不再引用才可删除。读取失败时静默跳过,不阻止文档删除。
+    // 必须确认其余存活文档均不再引用才可删除。清理失败不阻止文档删除。
     const storageDir = getStorageDir()
     let content: string
     try {
@@ -424,7 +460,15 @@ export function registerIpcHandlers(): void {
     } catch {
       return
     }
-    const otherContents = await collectSurvivingDocContents(storageDir, mdFilePath)
+    // 被删文档无图片引用 → 无孤儿可言,跳过全库扫描(批量删除时避免 O(N²))
+    if (extractImageFileNames(content).size === 0) return
+    let otherContents: string[]
+    try {
+      otherContents = await collectSurvivingDocContents(storageDir, mdFilePath)
+    } catch {
+      // 存活文档扫描不完整时宁可不删:孤儿可留,共享图不可误删
+      return
+    }
     const { assetsDir } = getAssetsDir(mdFilePath)
     for (const fileName of collectOrphanImages(content, otherContents)) {
       try {
