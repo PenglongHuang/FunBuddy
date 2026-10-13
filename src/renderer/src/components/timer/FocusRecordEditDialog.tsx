@@ -1,9 +1,10 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { X } from 'lucide-react'
 import { usePlanStore } from '@/stores/planStore'
 import SearchableSelect from '@/components/common/SearchableSelect'
 import { isoToDatetimeLocal, datetimeLocalToIso } from '@/utils/local-date'
+import useEscapeToCancel from '@/hooks/useEscapeToCancel'
 import type { TimerHistoryEntry } from '@/types/timer'
 
 interface FocusRecordEditDialogProps {
@@ -20,18 +21,7 @@ export default function FocusRecordEditDialog({ entry, onConfirm, onCancel }: Fo
   const snapshot = useRef(entry)
   const plans = usePlanStore((s) => s.plans)
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        onCancel()
-      }
-    }
-    // capture 阶段先于 App 的冒泡全局监听，阻止其把应用折叠成宠物模式
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [onCancel])
+  useEscapeToCancel(true, onCancel)
 
   const [completedAt, setCompletedAt] = useState(() => isoToDatetimeLocal(entry.completedAt))
   const [durationMinutes, setDurationMinutes] = useState(entry.durationMinutes)
