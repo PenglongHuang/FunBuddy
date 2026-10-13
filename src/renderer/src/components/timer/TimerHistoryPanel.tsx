@@ -6,6 +6,7 @@ import { useToastStore } from '@/stores/toastStore'
 import ContextMenu from '@/components/ui/ContextMenu'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import FocusRecordEditDialog from './FocusRecordEditDialog'
+import { localDateKey } from '@/utils/local-date'
 import type { TimerHistoryEntry } from '@/types/timer'
 
 type TabKey = 'today' | 'week' | 'calendar'
@@ -16,9 +17,9 @@ export default function TimerHistoryPanel() {
 
   const [activeTab, setActiveTab] = useState<TabKey>('today')
 
-  const today = useMemo(() => new Date().toISOString().split('T')[0], [])
+  const today = useMemo(() => localDateKey(), [])
   const todayEntries = useMemo(
-    () => history.filter((h) => h.completedAt.startsWith(today)).reverse(),
+    () => history.filter((h) => localDateKey(new Date(h.completedAt)) === today).reverse(),
     [history, today]
   )
 
@@ -233,8 +234,8 @@ function WeekView({ entries, resolvePlan, formatTime, onMoreClick }: {
     for (let i = 6; i >= 0; i--) {
       const d = new Date()
       d.setDate(d.getDate() - i)
-      const dateStr = d.toISOString().split('T')[0]
-      const dayEntries = entries.filter((h) => h.completedAt.startsWith(dateStr))
+      const dateStr = localDateKey(d)
+      const dayEntries = entries.filter((h) => localDateKey(new Date(h.completedAt)) === dateStr)
       const weekdays = ['日', '一', '二', '三', '四', '五', '六']
       days.push({
         date: dateStr,
@@ -306,7 +307,7 @@ function CalendarView({ entries, resolvePlan, formatTime, onMoreClick }: {
   const dateCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const e of entries) {
-      const date = e.completedAt.split('T')[0]
+      const date = localDateKey(new Date(e.completedAt))
       counts[date] = (counts[date] || 0) + 1
     }
     return counts
@@ -314,7 +315,7 @@ function CalendarView({ entries, resolvePlan, formatTime, onMoreClick }: {
 
   const selectedEntries = useMemo(() => {
     if (!selectedDate) return []
-    return entries.filter((h) => h.completedAt.startsWith(selectedDate)).reverse()
+    return entries.filter((h) => localDateKey(new Date(h.completedAt)) === selectedDate).reverse()
   }, [entries, selectedDate])
 
   const changeMonth = (delta: number) => {
@@ -324,7 +325,7 @@ function CalendarView({ entries, resolvePlan, formatTime, onMoreClick }: {
     setSelectedDate(null)
   }
 
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = localDateKey()
 
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
