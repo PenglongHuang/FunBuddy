@@ -177,6 +177,7 @@ export default function App() {
   useEffect(() => {
     if (!isQuickCapture && windowMode === 'expanded') {
       const handleKey = (e: KeyboardEvent) => {
+        if (e.defaultPrevented) return // 对话框已在 capture 阶段处理
         if (e.key === 'Escape') {
           setWindowMode('pet')
         }

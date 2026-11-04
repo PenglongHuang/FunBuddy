@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react'
 import { X } from 'lucide-react'
 import { usePlanStore } from '@/stores/planStore'
 import SearchableSelect from '@/components/common/SearchableSelect'
+import { isoToDatetimeLocal, datetimeLocalToIso } from '@/utils/local-date'
+import useEscapeToCancel from '@/hooks/useEscapeToCancel'
 import type { TimerHistoryEntry } from '@/types/timer'
 
 interface FocusRecordEditDialogProps {
@@ -15,23 +17,19 @@ interface FocusRecordEditDialogProps {
   onCancel: () => void
 }
 
-function isoToDatetimeLocal(iso: string): string {
-  return iso.slice(0, 16)
-}
-
-function datetimeLocalToIso(value: string): string {
-  return new Date(value).toISOString()
-}
-
 export default function FocusRecordEditDialog({ entry, onConfirm, onCancel }: FocusRecordEditDialogProps) {
   const snapshot = useRef(entry)
   const plans = usePlanStore((s) => s.plans)
+
+  useEscapeToCancel(true, onCancel)
 
   const [completedAt, setCompletedAt] = useState(() => isoToDatetimeLocal(entry.completedAt))
   const [durationMinutes, setDurationMinutes] = useState(entry.durationMinutes)
   const [planId, setPlanId] = useState<string | null>(entry.planId ?? null)
 
   const original = snapshot.current
+  // datetime-local 只有分钟精度：原值先过同一转换再作比较基准，避免秒/毫秒差异误报 hasChanges
+  const originalCompletedIso = datetimeLocalToIso(isoToDatetimeLocal(original.completedAt))
 
   const FREE_FOCUS_VALUE = '__free__'
 
@@ -47,7 +45,9 @@ export default function FocusRecordEditDialog({ entry, onConfirm, onCancel }: Fo
   const selectValue = planId ?? FREE_FOCUS_VALUE
 
   const hasChanges = useMemo(() => {
-    if (datetimeLocalToIso(completedAt) !== original.completedAt) return true
+    const completedIso = datetimeLocalToIso(completedAt)
+    // 清空输入视为无变化，保存按钮禁用，避免把空值当变更提交
+    if (completedIso && completedIso !== originalCompletedIso) return true
     if (durationMinutes !== original.durationMinutes) return true
     const newPlanId = planId ?? undefined
     const origPlanId = original.planId
@@ -57,8 +57,9 @@ export default function FocusRecordEditDialog({ entry, onConfirm, onCancel }: Fo
 
   const handleConfirm = () => {
     const updates: { completedAt?: string; durationMinutes?: number; planId?: string | null } = {}
-    if (datetimeLocalToIso(completedAt) !== original.completedAt) {
-      updates.completedAt = datetimeLocalToIso(completedAt)
+    const completedIso = datetimeLocalToIso(completedAt)
+    if (completedIso && completedIso !== originalCompletedIso) {
+      updates.completedAt = completedIso
     }
     if (durationMinutes !== original.durationMinutes) {
       updates.durationMinutes = durationMinutes
@@ -99,6 +100,7 @@ export default function FocusRecordEditDialog({ entry, onConfirm, onCancel }: Fo
           onClick={(e) => e.stopPropagation()}
           style={{
             width: 300,
+            maxWidth: 'calc(100vw - 48px)',
             background: 'rgba(44, 44, 46, 0.98)',
             borderRadius: 'var(--radius-xl)',
             padding: 20,

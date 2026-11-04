@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { FileDown, Loader2 } from 'lucide-react'
+import useEscapeToCancel from '@/hooks/useEscapeToCancel'
 import type { ExportMode } from '@/lib/export-pdf'
 
 interface ExportDialogProps {
@@ -12,6 +13,10 @@ interface ExportDialogProps {
 export default function ExportDialog({ open, onClose, onExport }: ExportDialogProps) {
   const [mode, setMode] = useState<ExportMode>('title-body')
   const [exporting, setExporting] = useState(false)
+
+  // 导出中禁取消,但必须保留捕获监听吞掉 Escape:若整个不注册,
+  // Escape 会直达 App 全局监听把应用折叠成宠物模式,悬着的保存对话框状态随之丢失
+  useEscapeToCancel(open, exporting ? () => undefined : onClose)
 
   const handleExport = async () => {
     setExporting(true)
@@ -52,6 +57,7 @@ export default function ExportDialog({ open, onClose, onExport }: ExportDialogPr
               borderRadius: 12,
               padding: '20px 24px',
               width: 280,
+              maxWidth: 'calc(100vw - 48px)',
               boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
             }}
           >

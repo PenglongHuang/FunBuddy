@@ -5,6 +5,7 @@ import { usePetStore } from './petStore'
 import { useSettingsStore } from './settingsStore'
 import { useToastStore } from './toastStore'
 import { fireConfetti } from '@/lib/confetti'
+import { localDateKey } from '@/utils/local-date'
 import type { TimerPhase, TimerStatus, TimerHistoryEntry } from '@/types/timer'
 
 interface TimerStore {
@@ -272,8 +273,8 @@ export const useTimerStore = create<TimerStore>()(
     },
 
     _recalcTodayStats: () => {
-      const today = new Date().toISOString().split('T')[0]
-      const todayEntries = get().history.filter((h) => h.completedAt.startsWith(today))
+      const today = localDateKey()
+      const todayEntries = get().history.filter((h) => localDateKey(new Date(h.completedAt)) === today)
       set({
         todayCount: todayEntries.length,
         todayMinutes: todayEntries.reduce((sum, h) => sum + h.durationMinutes, 0),

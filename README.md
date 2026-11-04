@@ -146,8 +146,8 @@ FunBuddy/
 ```bash
 git clone https://github.com/PenglongHuang/FunBuddy.git
 cd FunBuddy
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 需要 Node.js >= 18，当前仅支持 Windows 10/11。
@@ -156,17 +156,17 @@ npm run dev
 
 | 命令 | 作用 |
 |------|------|
-| `npm run dev` | 启动开发环境（热更新） |
-| `npm run build` | 构建生产产物 |
-| `npm run preview` | 预览构建产物 |
-| `npm test` | 运行单元测试 |
-| `npm run typecheck` | TypeScript 类型检查 |
-| `npm run build:win` | 打包 Windows 安装包 |
+| `pnpm dev` | 启动开发环境（热更新） |
+| `pnpm build` | 构建生产产物 |
+| `pnpm preview` | 预览构建产物 |
+| `pnpm test` | 运行单元测试 |
+| `pnpm typecheck` | TypeScript 类型检查 |
+| `pnpm build:win` | 打包 Windows 安装包 |
 
 ### 打包发布
 
 ```bash
-npm run build:win
+pnpm build:win
 ```
 
 生成的安装包在 `dist/` 目录下。

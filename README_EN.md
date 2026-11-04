@@ -146,8 +146,8 @@ FunBuddy/
 ```bash
 git clone https://github.com/PenglongHuang/FunBuddy.git
 cd FunBuddy
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Requires Node.js >= 18. Windows 10/11 only for now.
@@ -156,17 +156,17 @@ Requires Node.js >= 18. Windows 10/11 only for now.
 
 | Command | Purpose |
 |----------|---------|
-| `npm run dev` | Start dev environment (HMR) |
-| `npm run build` | Build production artifacts |
-| `npm run preview` | Preview the build |
-| `npm test` | Run unit tests |
-| `npm run typecheck` | TypeScript type checking |
-| `npm run build:win` | Package the Windows installer |
+| `pnpm dev` | Start dev environment (HMR) |
+| `pnpm build` | Build production artifacts |
+| `pnpm preview` | Preview the build |
+| `pnpm test` | Run unit tests |
+| `pnpm typecheck` | TypeScript type checking |
+| `pnpm build:win` | Package the Windows installer |
 
 ### Build for Distribution
 
 ```bash
-npm run build:win
+pnpm build:win
 ```
 
 The installer will be generated in the `dist/` directory.

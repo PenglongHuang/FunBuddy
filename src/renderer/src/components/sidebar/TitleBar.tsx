@@ -69,7 +69,7 @@ export default function TitleBar() {
       </div>
 
       {/* Center group — margin: 0 auto */}
-      <div style={{ WebkitAppRegion: 'no-drag', margin: '0 auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ WebkitAppRegion: 'no-drag', margin: '0 auto', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, maxWidth: 'calc(100% - 140px)' }}>
         <NavHistoryButtons />
         <DynamicIsland />
         <AiSearchTrigger />

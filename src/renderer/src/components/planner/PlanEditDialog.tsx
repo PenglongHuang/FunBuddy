@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { X } from 'lucide-react'
 import DatePicker from '@/components/common/DatePicker'
+import useEscapeToCancel from '@/hooks/useEscapeToCancel'
 import type { Plan, PlanType } from '@/types/plan'
 
 const PLAN_TYPE_OPTIONS: Array<{ key: PlanType; label: string }> = [
@@ -61,6 +62,8 @@ export default function PlanEditDialog({ plan, onConfirm, onCancel }: PlanEditDi
   const [weekStart, setWeekStart] = useState(plan.startDate)
   const [weekEnd, setWeekEnd] = useState(plan.endDate || plan.startDate)
   const [selectedMonth, setSelectedMonth] = useState(dateToMonth(plan.startDate))
+
+  useEscapeToCancel(true, onCancel)
 
   // When type changes, reset dates to defaults for the new type
   const handleTypeChange = (newType: PlanType) => {
@@ -147,6 +150,7 @@ export default function PlanEditDialog({ plan, onConfirm, onCancel }: PlanEditDi
           onClick={(e) => e.stopPropagation()}
           style={{
             width: 320,
+            maxWidth: 'calc(100vw - 48px)',
             background: 'rgba(44, 44, 46, 0.98)',
             borderRadius: 'var(--radius-xl)',
             padding: 20,

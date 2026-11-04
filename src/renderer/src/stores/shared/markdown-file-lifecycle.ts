@@ -10,6 +10,13 @@ interface AssetIo {
   moveAssets: (oldMarkdownPath: string, newMarkdownPath: string) => Promise<unknown>
 }
 
+/** 索引未成功加载(读取/解析失败)时拒绝写索引——空列表覆写会丢失全部文档引用。 */
+export function assertIndexWritable(loaded: boolean, label: string): void {
+  if (!loaded) {
+    throw new Error(`${label}索引未成功加载，已拒绝覆写。原文件可能损坏，请先检查 ${label} 目录。`)
+  }
+}
+
 export async function appendIndexRecord<T>(
   io: FileIo,
   indexPath: string,

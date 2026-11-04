@@ -13,6 +13,7 @@ export default function AiSearchTrigger() {
       style={{
         width: 26,
         height: 26,
+        flexShrink: 0,
         borderRadius: 8,
         border: 'none',
         cursor: 'pointer',

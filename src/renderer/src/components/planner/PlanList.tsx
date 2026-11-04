@@ -20,6 +20,7 @@ import { pdfExport } from '@/lib/ipc'
 export default function PlanList() {
   const plans = usePlanStore((s) => s.plans)
   const loaded = usePlanStore((s) => s.loaded)
+  const loadFailed = usePlanStore((s) => s.loadFailed)
   const createPlan = usePlanStore((s) => s.createPlan)
   const deletePlan = usePlanStore((s) => s.deletePlan)
   const deletePlans = usePlanStore((s) => s.deletePlans)
@@ -182,6 +183,13 @@ export default function PlanList() {
   }
 
   if (!loaded) {
+    if (loadFailed) {
+      return (
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', padding: '32px 12px' }}>
+          计划索引读取失败，为防数据丢失已锁定写入。请检查工作区目录。
+        </div>
+      )
+    }
     return (
       <div style={{ fontSize: 12, color: '#48484a', textAlign: 'center', padding: '32px 0' }}>
         加载中...

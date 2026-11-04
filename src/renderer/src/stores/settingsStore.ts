@@ -63,12 +63,13 @@ export const useSettingsStore = create<SettingsState>()(
     },
 
     setStorageDir: async (dir) => {
+      // 特权键 settings.storageDir(History) 已拒绝渲染端直写,
+      // 由主进程校验令牌/历史后落盘;成功后再更新本地镜像
+      await store.setStorageDir(dir)
       set((s) => {
         s.storageDir = dir
         s.storageDirHistory = [dir, ...s.storageDirHistory.filter((d) => d !== dir)].slice(0, 5)
       })
-      await store.set('settings.storageDir', dir)
-      await store.set('settings.storageDirHistory', get().storageDirHistory)
     },
 
     updatePomodoro: async (updates) => {

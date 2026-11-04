@@ -358,7 +358,6 @@ export default function SettingsPanel() {
 
   const plans = usePlanStore((s) => s.plans)
   const notes = useNoteStore((s) => s.notes)
-  const tocMaxLevel = useSettingsStore((s) => s.app.tocMaxLevel)
 
   const handleExportJSON = async () => {
     try {
@@ -692,14 +691,11 @@ export default function SettingsPanel() {
       >
         <NumberInputRow
           label="目录显示层级"
-          value={tocMaxLevel}
+          value={pendingApp.tocMaxLevel}
           unit="级"
           min={1}
           max={6}
-          onChange={(value) => {
-            setPendingApp((pending) => ({ ...pending, tocMaxLevel: value }))
-            updateApp({ tocMaxLevel: value })
-          }}
+          onChange={(v) => { const next = { ...pendingApp, tocMaxLevel: v }; setPendingApp(next); checkDirty(pendingPomodoro, next) }}
         />
         <NumberInputRow
           label="最大 Tab 数"

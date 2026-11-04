@@ -16,6 +16,7 @@ import { pdfExport } from '@/lib/ipc'
 export default function NotesPanel() {
   const notes = useNoteStore((s) => s.notes)
   const loaded = useNoteStore((s) => s.loaded)
+  const loadFailed = useNoteStore((s) => s.loadFailed)
   const activeNoteId = useNoteStore((s) => s.activeNoteId)
   const load = useNoteStore((s) => s.load)
   const createNote = useNoteStore((s) => s.createNote)
@@ -161,6 +162,13 @@ export default function NotesPanel() {
   }
 
   if (!loaded) {
+    if (loadFailed) {
+      return (
+        <div style={{ font: 'var(--text-caption-1)', color: 'var(--text-secondary)', textAlign: 'center', padding: '32px 12px' }}>
+          笔记索引读取失败，为防数据丢失已锁定写入。请检查工作区目录。
+        </div>
+      )
+    }
     return (
       <div style={{ font: 'var(--text-caption-1)', color: 'var(--text-quaternary)', textAlign: 'center', padding: '32px 0' }}>
         加载中...
@@ -248,7 +256,7 @@ export default function NotesPanel() {
         display: viewMode === 'compact' ? 'grid' : 'flex',
         flexDirection: 'column',
         ...(viewMode === 'compact'
-          ? { gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, alignContent: 'start' }
+          ? { gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6, alignContent: 'start' }
           : { gap: 8, padding: '0 12px' }),
       }}>
         {sortedNotes.length === 0 && !editMode ? (

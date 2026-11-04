@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react'
+import useEscapeToCancel from '@/hooks/useEscapeToCancel'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -19,6 +20,8 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  useEscapeToCancel(open, onCancel)
+
   return (
     <AnimatePresence>
       {open && (
@@ -46,6 +49,7 @@ export default function ConfirmDialog({
             onClick={(e) => e.stopPropagation()}
             style={{
               width: 280,
+              maxWidth: 'calc(100vw - 48px)',
               background: 'var(--bg-secondary)',
               borderRadius: 20,
               padding: 20,

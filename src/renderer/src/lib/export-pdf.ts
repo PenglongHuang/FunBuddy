@@ -9,8 +9,10 @@ import bash from 'highlight.js/lib/languages/bash'
 import xml from 'highlight.js/lib/languages/xml'
 import markdown from 'highlight.js/lib/languages/markdown'
 import { imageApi } from './ipc'
+import { sanitizeMarkdownHtml } from './markdown-sanitize'
 import { escapeRawAngles } from './link-parser'
 import { escapeHtml } from './string-util'
+import { IMAGE_REF_REGEX } from '../../../shared/image-ref'
 
 // Register languages (same as MarkdownPreview)
 hljs.registerLanguage('javascript', javascript)
@@ -44,8 +46,6 @@ export interface ExportOptions {
     endDate?: string | null
   }
 }
-
-const IMAGE_REF_REGEX = /!\[[^\]]*\]\(([^)]*\/assets\/[^)]+)\)/g
 
 const CSS = `
 body {
@@ -140,7 +140,8 @@ async function renderMarkdown(content: string, mdFilePath: string): Promise<stri
   marked.use(buildCodeRenderer())
   marked.use(buildImageRenderer(imageMap))
 
-  return marked.parse(escapeRawAngles(content), { async: false }) as string
+  // 与 MarkdownPreview 相同的最终消毒(离屏导出窗口虽无 preload,仍是同源姊妹路径)
+  return sanitizeMarkdownHtml(marked.parse(escapeRawAngles(content), { async: false }) as string)
 }
 
 export async function buildExportHtml(options: ExportOptions): Promise<string> {

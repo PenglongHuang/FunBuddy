@@ -165,9 +165,9 @@ export function useDocumentPersistence(options: UseDocumentPersistenceOptions): 
         contentRef.current = coordinator.snapshot(session).content
         refresh((version) => version + 1)
       }
-      session.options.showToast('淇濆瓨鎴愬姛')
+      session.options.showToast('保存成功')
     } catch {
-      session.options.showToast('淇濆瓨澶辫触')
+      session.options.showToast('保存失败')
     }
   }, [coordinator])
 

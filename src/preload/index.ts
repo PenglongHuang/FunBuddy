@@ -6,11 +6,7 @@ const api = {
   storeGet: (key: string) => ipcRenderer.invoke(IPC.STORE_GET, key),
   storeSet: (key: string, value: unknown) => ipcRenderer.invoke(IPC.STORE_SET, key, value),
   storeDelete: (key: string) => ipcRenderer.invoke(IPC.STORE_DELETE, key),
-  onStoreDidChange: (callback: (key: string, newValue: unknown, oldValue: unknown) => void) => {
-    const handler = (_e: any, data: { key: string; newValue: unknown; oldValue: unknown }) => callback(data.key, data.newValue, data.oldValue)
-    ipcRenderer.on(IPC.STORE_ON_DID_CHANGE, handler)
-    return () => ipcRenderer.removeListener(IPC.STORE_ON_DID_CHANGE, handler)
-  },
+  storeSetStorageDir: (dir: string) => ipcRenderer.invoke(IPC.STORE_SET_STORAGE_DIR, dir),
 
   // FS
   fsReadFile: (filePath: string) => ipcRenderer.invoke(IPC.FS_READ_FILE, filePath),
@@ -63,8 +59,6 @@ const api = {
     ipcRenderer.invoke(IPC.IMAGE_SAVE, mdFilePath, imageData, ext, altName) as Promise<{ relativePath: string; fileName: string }>,
   imagePickAndSave: (mdFilePath: string) =>
     ipcRenderer.invoke(IPC.IMAGE_PICK_AND_SAVE, mdFilePath) as Promise<{ relativePath: string; fileName: string } | null>,
-  imageDelete: (mdFilePath: string, imageFileName: string) =>
-    ipcRenderer.invoke(IPC.IMAGE_DELETE, mdFilePath, imageFileName) as Promise<void>,
   imageCleanup: (mdFilePath: string) =>
     ipcRenderer.invoke(IPC.IMAGE_CLEANUP, mdFilePath) as Promise<void>,
   imageReadAsDataUrl: (mdFilePath: string, imageFileName: string, maxWidth?: number) =>
