@@ -62,10 +62,10 @@ export default function SplitPaneLiveEditor({ value, onChange, onCursorLineChang
       </div>
 
       {/* Divider */}
-      <div style={{ width: 1, background: 'var(--separator)', flexShrink: 0 }} />
+      <div className="@max-[440px]:hidden" style={{ width: 1, background: 'var(--separator)', flexShrink: 0 }} />
 
       {/* Preview pane */}
-      <div ref={previewPaneRef} className="live-preview-pane" style={{ flex: 1, overflow: 'auto', minWidth: 0, minHeight: 0, padding: '0 8px', userSelect: 'text' }} onContextMenu={(e) => onPreviewContextMenu?.(e)}>
+      <div ref={previewPaneRef} className="live-preview-pane @max-[440px]:hidden" style={{ flex: 1, overflow: 'auto', minWidth: 0, minHeight: 0, padding: '0 8px', userSelect: 'text' }} onContextMenu={(e) => onPreviewContextMenu?.(e)}>
         <MarkdownPreview content={value} mdFilePath={mdFilePath} onLinkClick={onLinkClick} />
       </div>
     </div>

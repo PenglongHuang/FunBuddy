@@ -27,7 +27,7 @@ export default function NavHistoryButtons() {
   const iconColor = (enabled: boolean) => enabled ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)'
 
   return (
-    <div style={{ display: 'flex', gap: 2 }}>
+    <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
       <button
         onClick={back}
         disabled={!canBack}

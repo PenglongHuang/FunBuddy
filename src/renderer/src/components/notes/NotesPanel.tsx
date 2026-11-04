@@ -256,7 +256,7 @@ export default function NotesPanel() {
         display: viewMode === 'compact' ? 'grid' : 'flex',
         flexDirection: 'column',
         ...(viewMode === 'compact'
-          ? { gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, alignContent: 'start' }
+          ? { gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6, alignContent: 'start' }
           : { gap: 8, padding: '0 12px' }),
       }}>
         {sortedNotes.length === 0 && !editMode ? (

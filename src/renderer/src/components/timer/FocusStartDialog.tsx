@@ -71,6 +71,7 @@ export default function FocusStartDialog({ onCancel }: FocusStartDialogProps) {
           onClick={(e) => e.stopPropagation()}
           style={{
             width: 300,
+            maxWidth: 'calc(100vw - 48px)',
             background: 'rgba(44, 44, 46, 0.98)',
             borderRadius: 'var(--radius-xl)',
             padding: 20,

@@ -57,6 +57,7 @@ export default function ExportDialog({ open, onClose, onExport }: ExportDialogPr
               borderRadius: 12,
               padding: '20px 24px',
               width: 280,
+              maxWidth: 'calc(100vw - 48px)',
               boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
             }}
           >

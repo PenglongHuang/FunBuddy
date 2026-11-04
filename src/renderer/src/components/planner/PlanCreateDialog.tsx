@@ -112,6 +112,7 @@ export default function PlanCreateDialog({ onConfirm, onCancel }: PlanCreateDial
           onClick={(e) => e.stopPropagation()}
           style={{
             width: 320,
+            maxWidth: 'calc(100vw - 48px)',
             background: 'var(--bg-secondary)',
             borderRadius: 'var(--radius-xl)',
             padding: 20,

@@ -172,6 +172,7 @@ export default function DynamicIsland() {
         height: 26,
         overflow: 'hidden',
         position: 'relative',
+        minWidth: 0,
         maxWidth: isExpanded ? 280 : 120,
         transition: 'max-width 0.45s cubic-bezier(0.4, 0, 0.2, 1)',
       }}

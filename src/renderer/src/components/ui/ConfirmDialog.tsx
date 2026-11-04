@@ -49,6 +49,7 @@ export default function ConfirmDialog({
             onClick={(e) => e.stopPropagation()}
             style={{
               width: 280,
+              maxWidth: 'calc(100vw - 48px)',
               background: 'var(--bg-secondary)',
               borderRadius: 20,
               padding: 20,

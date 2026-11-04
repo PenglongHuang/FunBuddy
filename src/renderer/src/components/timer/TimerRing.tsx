@@ -37,12 +37,13 @@ export default function TimerRing({ phase, remainingMs, totalMs, round, status }
   const gradId = useMemo(() => `rg-${Math.random().toString(36).slice(2, 9)}`, [])
 
   return (
-    <div className="flex flex-col items-center gap-5">
+    <div className="flex flex-col items-center h-full min-h-0 gap-5">
       {/* Ring */}
-      <div className="relative" style={{ width: size, height: size }}>
+      <div className="relative flex-1" style={{ aspectRatio: '1', maxWidth: '100%', maxHeight: size, minHeight: 120 }}>
         <svg
-          width={size}
-          height={size}
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${size} ${size}`}
           className="-rotate-90"
           style={{ filter: isRunning ? `drop-shadow(0 0 10px ${color}40)` : 'none', transition: 'filter 0.5s ease' }}
         >

@@ -35,7 +35,7 @@ export default function TimerPanel() {
   const plans = usePlanStore((s) => s.plans)
 
   return (
-    <div className="flex flex-col h-full gap-4" style={{ position: 'relative' }}>
+    <div className="flex flex-col h-full gap-4 overflow-y-auto" style={{ position: 'relative' }}>
       {/* History panel (top) */}
       <div
         onClick={() => setShowHistory(!showHistory)}
@@ -50,7 +50,7 @@ export default function TimerPanel() {
       <div style={{ borderTop: '0.5px solid rgba(255,255,255,0.06)' }} />
 
       {/* Timer area (bottom) */}
-      <div className="flex flex-col items-center gap-4">
+      <div className="flex flex-col items-center gap-4 flex-1 min-h-0">
         <TimerRing
           phase={timer.phase}
           remainingMs={timer.remainingMs}
